@@ -1,0 +1,4 @@
+dataset/*
+!dataset/README.md
+*.parquet
+*.npz
