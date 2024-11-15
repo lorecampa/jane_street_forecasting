@@ -2,3 +2,15 @@ dataset/*
 !dataset/README.md
 *.parquet
 *.npz
+.venv
+
+__pycache__/
+.idea/
+.vscode/
+*.egg-info
+.env
+.venv
+env/
+
+
+experiments/
