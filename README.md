@@ -1,6 +1,16 @@
 # Jane Street Forecasting
 
-This project involves forecasting using a structured dataset provided by Jane Street. The repository includes scripts and data for training, testing, and making predictions.
+<p align="center">
+  <a href="http://recsys.deib.polimi.it">
+    <img src="https://i.imgur.com/mPb3Qbd.gif" width="180" />
+  </a>
+</p>
+
+We participated in the challenge as [...], a team of 3 MSc students from Politecnico di Milano:
+
+* **[Andrea Alari](https://github.com/andrea-alari)**
+* **[Lorenzo Campana](https://github.com/lorecampa)**
+* **[Carlo Sgaravatti](https://github.com/CarloSgaravatti)**
 
 ## Setup Instructions
 
