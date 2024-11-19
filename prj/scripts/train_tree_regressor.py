@@ -12,7 +12,8 @@ from prj.agents.factory import AgentsFactory
 from prj.config import DATA_DIR, EXP_DIR, GLOBAL_SEED, ROOT_DIR
 import polars as pl
 
-from prj.utils import save_dict_to_json, set_random_seed
+from prj.plots import plot_partition_heatmap
+from prj.utils import load_json, merge_dicts, save_dict_to_json, set_random_seed
 
 def get_cli_args():
     """Create CLI parser and return parsed arguments"""
@@ -141,9 +142,36 @@ def main():
         )
     
     # evaluations_partition_ids = list(range(train_partition_ids[-1] + 1, train_partition_ids[-1] + 1 + 3))
-    evaluations_partition_ids = list(range(1, 10)) #all except the first partition
-    for partition_id in tqdm(evaluations_partition_ids):
-        trainer.evaluate(partition_id, save_path=os.path.join(out_dir, 'evaluations'))
+    range_evaluation = range(0, 10)
+    evaluations = []
+    for partition_id in tqdm(list(range_evaluation)):
+        evaluation = trainer.evaluate(partition_id, save_path=os.path.join(out_dir, 'evaluations'))
+        evaluations.append(evaluation)
+    
+    final_evaluation_dict = merge_dicts(evaluations)
+    save_dict_to_json(final_evaluation_dict, os.path.join(out_dir, 'evaluations', 'result_aggregate.json'))
+    
+    # Plots
+    first_partion_evaluation = list(range_evaluation)[0]
+    training_partitions = [
+        [(start_partition_id-first_partion_evaluation, end_partition_id-first_partion_evaluation)]
+    ]
+    x_tick_labels = [f'partition {i}' for i in range_evaluation]
+    y_tick_labels = [model_type]
+    
+    plot_dir = os.path.join(out_dir, 'plots')
+    os.makedirs(plot_dir, exist_ok=True)
+    for metric in final_evaluation_dict.keys():
+        plot_partition_heatmap(
+            np.array([np.array(final_evaluation_dict[metric])]),
+            training_partitions, 
+            title=f'{model_type}-{metric.upper()} Heatmap', 
+            xticklabels=x_tick_labels, 
+            yticklabels=y_tick_labels, 
+            save_path=os.path.join(plot_dir, f'{metric}_heatmap.png'),
+            decimal_places=4
+        )
+    
     
 DEFAULT_TREE_PARAMS = {
     'lgbm': {

@@ -81,11 +81,8 @@ def set_random_seed(seed: int) -> None:
     
 
 def load_json(path: str | Path) -> dict | None:
-    try:
-        return json.loads(path)
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
-        return None
+    with open(path, 'r') as file:
+        return json.load(file)
     
 def save_dict_to_json(d: dict, path: str | Path, indent=4):
     if isinstance(path, str):
@@ -99,3 +96,13 @@ def save_dict_to_pickle(data_dict: dict, path: str | Path):
         path = Path(path)
     with open(path, 'wb') as f:
         pickle.dump(data_dict, f)  
+        
+
+def merge_dicts(dicts: list[dict]) -> dict:
+    final_dict = {}
+    for d in dicts:
+        for key, value in d.items():
+            if key not in final_dict:
+                final_dict[key] = []
+            final_dict[key].append(value)
+    return final_dict
