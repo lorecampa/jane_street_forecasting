@@ -14,3 +14,7 @@ env/
 
 
 experiments/
+saved_agents/
+
+catboost_info/
+**/catboost_info/

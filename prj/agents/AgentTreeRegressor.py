@@ -42,7 +42,11 @@ class AgentTreeRegressor(AgentRegressor):
             callbacks = []
             if self.agent_type == 'lgbm':
                 callbacks.append(log_evaluation(period=20))
-                curr_agent = self.agent_class(**model_args, random_state=seed)
+            elif self.agent_type == 'xgb':
+                pass
+            elif self.agent_type == 'catboost':
+                pass
+            curr_agent = self.agent_class(**model_args, random_state=seed)    
             curr_agent.fit(X, y, callbacks=callbacks)
             self.agents.append(curr_agent)
             
@@ -55,8 +59,9 @@ class AgentTreeRegressor(AgentRegressor):
         for i, seed in enumerate(self.seeds):
             seed_path = os.path.join(path, f'seed_{seed}')
             os.makedirs(seed_path, exist_ok=True)
-            if self.agent_type == 'lgbm':
-                joblib.dump(self.agents[i], os.path.join(seed_path, 'model.pkl'))
+            if self.agent_type in ['lgbm', 'xgb', 'catboost']:
+                joblib.dump(self.agents[i], os.path.join(seed_path, 'model.joblib'))
+                
 
     def load(self, path: typing.Optional[str]):
         if path is None:
@@ -70,6 +75,6 @@ class AgentTreeRegressor(AgentRegressor):
         self.agents = []
         for seed in self.seeds:
             seed_path = os.path.join(path, f'seed_{seed}')
-            if self.agent_type == 'lgbm':
-                self.agents.append(joblib.load(os.path.join(seed_path, 'model.pkl')))
+            if self.agent_type in ['lgbm', 'xgb', 'catboost']:
+                self.agents.append(joblib.load(os.path.join(seed_path, 'model.joblib')))
         

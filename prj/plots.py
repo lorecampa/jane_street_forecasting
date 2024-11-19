@@ -37,7 +37,7 @@ def plot_time_series(data: np.ndarray, labels: List[str], times: np.ndarray, tit
 
 def plot_partition_heatmap(results: np.ndarray, training_partitions: list[list[tuple[int, int]]], title="Partition Heatmap", 
                  xticklabels: list[str]=None, yticklabels: list[str]=None,
-                 decimal_places: int = 2, use_e_notation: bool = False,
+                 decimal_places: int = 2, use_e_notation: bool = False, invert_scale:bool = False,
                  save_path:str = None, force_show: bool = False):
     assert results.ndim == 2
     assert results.shape[0] == len(training_partitions)
@@ -46,6 +46,8 @@ def plot_partition_heatmap(results: np.ndarray, training_partitions: list[list[t
     num_rows, num_cols = results.shape
     plt.figure(figsize=(num_cols*1.5, num_rows*1.5))
     cmap = sns.light_palette("blue", as_cmap=True)
+    if invert_scale:
+        cmap = cmap.reversed()
     
     fmt = f".{decimal_places}{'e' if use_e_notation else 'f'}"
     

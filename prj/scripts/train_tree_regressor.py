@@ -169,13 +169,22 @@ def main():
             xticklabels=x_tick_labels, 
             yticklabels=y_tick_labels, 
             save_path=os.path.join(plot_dir, f'{metric}_heatmap.png'),
-            decimal_places=4
+            decimal_places=4,
+            invert_scale=metric not in ['r2_w'] # Invert scale for loss metrics
         )
     
     
 DEFAULT_TREE_PARAMS = {
     'lgbm': {
         'objective': 'regression',
+    },
+    'xgb': {
+        'objective': 'reg:squarederror',
+    },
+    'catboost': {
+        'objective': 'RMSE',
+        'verbose': 50,
+        'iterations': 100
     }
 }
     
