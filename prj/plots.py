@@ -38,6 +38,7 @@ def plot_time_series(data: np.ndarray, labels: List[str], times: np.ndarray, tit
 def plot_partition_heatmap(results: np.ndarray, training_partitions: list[list[tuple[int, int]]], title="Partition Heatmap", 
                  xticklabels: list[str]=None, yticklabels: list[str]=None,
                  decimal_places: int = 2, use_e_notation: bool = False, invert_scale:bool = False,
+                 show_best_per_partition: bool = False,
                  save_path:str = None, force_show: bool = False):
     assert results.ndim == 2
     assert results.shape[0] == len(training_partitions)
@@ -59,18 +60,16 @@ def plot_partition_heatmap(results: np.ndarray, training_partitions: list[list[t
         for start, end in train_days:
             ax.add_patch(plt.Rectangle((start, row), end - start + 1, 1, fill=False, edgecolor='red', lw=3))
     
-    best_indices = []
-    for col in range(results.shape[1]):
-        best_rows = np.argsort(results[:, col]) if invert_scale else np.argsort(results[:, col])[::-1]
-        
-        # print(training_partitions[best_rows[0]], best_rows[0], col)
-        best_rows = [x for x in best_rows if x != col-1]
-        if len(best_rows) > 0:
-            best_indices.append((best_rows[0], col))
-        # best_indices.append((best_rows[1], col))
-        
-    for best_row, best_col in best_indices:
-        ax.add_patch(plt.Rectangle((best_col, best_row), 1, 1, fill=False, edgecolor='orange', lw=3))
+    if show_best_per_partition:
+        best_indices = []
+        for col in range(results.shape[1]):
+            best_rows = np.argsort(results[:, col]) if invert_scale else np.argsort(results[:, col])[::-1]            
+            best_rows = [x for x in best_rows if x != col-1] # Exclude the same partition, should be changed
+            if len(best_rows) > 0:
+                best_indices.append((best_rows[0], col))
+            
+        for best_row, best_col in best_indices:
+            ax.add_patch(plt.Rectangle((best_col, best_row), 1, 1, fill=False, edgecolor='orange', lw=3))
         
     plt.title(title)
     if save_path:

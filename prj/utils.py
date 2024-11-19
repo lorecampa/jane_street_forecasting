@@ -86,7 +86,7 @@ def load_json(path: str | Path) -> dict | None:
         return json.load(file)
 
 def load_pickle(path: str | Path) -> dict | None:
-    with open(path, 'r') as file:
+    with open(path, 'rb') as file:
         return pickle.load(file)
     
 def save_dict_to_json(d: dict, path: str | Path, indent=4):

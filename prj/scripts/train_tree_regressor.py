@@ -177,6 +177,7 @@ def main():
             xticklabels=x_tick_labels, 
             yticklabels=y_tick_labels, 
             save_path=os.path.join(plot_dir, f'{metric}_heatmap.png'),
+            show_best_per_partition=False,
             decimal_places=4,
             invert_scale=metric not in ['r2_w'] # Invert scale for loss metrics
         )

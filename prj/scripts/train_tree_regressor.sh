@@ -1,5 +1,5 @@
 #!/bin/sh
-for partition_id in $(seq 1 1)
+for partition_id in $(seq 1 9)
 do
     python prj/scripts/train_tree_regressor.py \
         --model "xgb" \
