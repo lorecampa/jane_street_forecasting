@@ -1,3 +1,7 @@
+import json
+from pathlib import Path
+import pickle
+import random
 import polars as pl
 import gc
 import numpy as np
@@ -63,3 +67,35 @@ def reduce_mem_usage(df: pl.DataFrame, verbose:bool = False):
         print('Decreased by {:.1f}%'.format(100 * (start_mem - end_mem) / start_mem))
     
     return df
+
+def set_random_seed(seed: int) -> None:
+    """
+    Seed the different random generators.
+
+    :param seed:
+    """
+    # Seed python RNG
+    random.seed(seed)
+    # Seed numpy RNG
+    np.random.seed(seed)
+    
+
+def load_json(path: str | Path) -> dict | None:
+    try:
+        return json.loads(path)
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON: {e}")
+        return None
+    
+def save_dict_to_json(d: dict, path: str | Path, indent=4):
+    if isinstance(path, str):
+        path = Path(path)
+
+    with open(path, 'w') as f:
+        json.dump(d, f, indent=indent)
+
+def save_dict_to_pickle(data_dict: dict, path: str | Path):
+    if isinstance(path, str):
+        path = Path(path)
+    with open(path, 'wb') as f:
+        pickle.dump(data_dict, f)  

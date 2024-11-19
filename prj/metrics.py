@@ -45,3 +45,36 @@ def return_over_max_drawdown(returns_pct):
     if mdd == 0:
         return np.inf
     return returns / mdd
+
+
+def weighted_r2(y_true, y_pred, weights=None):
+    """
+    Compute the sample weighted zero-mean R-squared score (R²).
+
+    Parameters:
+    - y_true: numpy array, ground-truth values
+    - y_pred: numpy array, predicted values
+    - weights: numpy array, sample weights
+
+    Returns:
+    - r2: float, weighted R² score
+    """
+    if weights is None:
+        weights = np.ones_like(y_true)
+    return 1 - (np.sum(weights * (y_true - y_pred) ** 2) / np.sum(weights * (y_true ** 2)))
+
+def weighted_mae(y_true, y_pred, weights=None):
+    if weights is None:
+        weights = np.ones_like(y_true)
+    return np.sum(weights * np.abs(y_true - y_pred)) / np.sum(weights)
+
+def weighted_mse(y_true, y_pred, weights):
+    if weights is None:
+        weights = np.ones_like(y_true)
+    return np.sum(weights * (y_true - y_pred) ** 2) / np.sum(weights)
+
+def weighted_rmse(y_true, y_pred, weights):
+    if weights is None:
+        weights = np.ones_like(y_true)
+    mse = np.sum(weights * (y_true - y_pred) ** 2) / np.sum(weights)
+    return np.sqrt(mse)

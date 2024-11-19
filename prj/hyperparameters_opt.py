@@ -1,4 +1,5 @@
 import optuna
+from lightgbm import LGBMRegressor
 
 def sample_oamp_params(trial: optuna.Trial, additional_args: dict) -> dict:
     params = {
@@ -106,7 +107,6 @@ def sample_xgb_params(trial: optuna.Trial, additional_args: dict) -> dict:
     return params
 
 
-    
 
 SAMPLER = {
     "oamp": sample_oamp_params,
