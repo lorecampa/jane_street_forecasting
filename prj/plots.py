@@ -59,6 +59,19 @@ def plot_partition_heatmap(results: np.ndarray, training_partitions: list[list[t
         for start, end in train_days:
             ax.add_patch(plt.Rectangle((start, row), end - start + 1, 1, fill=False, edgecolor='red', lw=3))
     
+    best_indices = []
+    for col in range(results.shape[1]):
+        best_rows = np.argsort(results[:, col]) if invert_scale else np.argsort(results[:, col])[::-1]
+        
+        # print(training_partitions[best_rows[0]], best_rows[0], col)
+        best_rows = [x for x in best_rows if x != col-1]
+        if len(best_rows) > 0:
+            best_indices.append((best_rows[0], col))
+        # best_indices.append((best_rows[1], col))
+        
+    for best_row, best_col in best_indices:
+        ax.add_patch(plt.Rectangle((best_col, best_row), 1, 1, fill=False, edgecolor='orange', lw=3))
+        
     plt.title(title)
     if save_path:
         plt.savefig(save_path, bbox_inches='tight')

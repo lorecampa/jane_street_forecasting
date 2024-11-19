@@ -13,7 +13,7 @@ from prj.config import DATA_DIR, EXP_DIR, GLOBAL_SEED, ROOT_DIR
 import polars as pl
 
 from prj.plots import plot_partition_heatmap
-from prj.utils import load_json, merge_dicts, save_dict_to_json, set_random_seed
+from prj.utils import check_for_inf, load_json, merge_dicts, save_dict_to_json, save_dict_to_pickle, set_random_seed
 
 def get_cli_args():
     """Create CLI parser and return parsed arguments"""
@@ -73,10 +73,12 @@ class RegressorTrainer:
             model_type: str, 
             load_path: typing.Optional[str] = None,
             n_seeds:int = 1,
+            verbose: int = 0,
     ):      
         self.model_type = model_type
         self.n_seeds = n_seeds
         self.load_path = load_path
+        self.verbose=verbose
         self.agent: AgentTreeRegressor = AgentsFactory.load_agent({
             'agent_type': self.model_type, 
             'n_seeds': self.n_seeds,
@@ -93,6 +95,10 @@ class RegressorTrainer:
         features = [col for col in train_ds.columns if col.startswith('feature_')]
         target_feature = 'responder_6'
         
+        # Check for Inf
+        #TODO: How should I handle inf values and NaN/Null values?
+        # rows_with_inf, cols_with_inf = check_for_inf(train_ds)
+        
         X = train_ds.select(features).cast(pl.Float32).to_numpy()
         y = train_ds[target_feature].cast(pl.Float32).to_numpy()
         w = train_ds['weight'].cast(pl.Float32).to_numpy()
@@ -102,6 +108,7 @@ class RegressorTrainer:
     def train(self, partition_ids: list[int], model_args: dict = {}, save_path: typing.Optional[str] = None):
         X, y, _ = self.prepare_dataset(partition_ids)
         self.agent.train(X, y, model_args=model_args)
+        print(f'Training completed')
         
         if save_path is not None:
             os.makedirs(save_path, exist_ok=True)
@@ -112,8 +119,9 @@ class RegressorTrainer:
         result = self.agent.evaluate(X, y, weights=w)
         if save_path is not None:
             os.makedirs(save_path, exist_ok=True)
-            save_dict_to_json(result, os.path.join(save_path, f'result_{partition}.json'))
+            save_dict_to_pickle(result, os.path.join(save_path, f'result_{partition}.pkl'))
         return result
+    
 def main():
     args = get_cli_args()
     seed = args.seed
@@ -149,7 +157,7 @@ def main():
         evaluations.append(evaluation)
     
     final_evaluation_dict = merge_dicts(evaluations)
-    save_dict_to_json(final_evaluation_dict, os.path.join(out_dir, 'evaluations', 'result_aggregate.json'))
+    save_dict_to_pickle(final_evaluation_dict, os.path.join(out_dir, 'evaluations', 'result_aggregate.pkl'))
     
     # Plots
     first_partion_evaluation = list(range_evaluation)[0]
@@ -184,7 +192,6 @@ DEFAULT_TREE_PARAMS = {
     'catboost': {
         'objective': 'RMSE',
         'verbose': 50,
-        'iterations': 100
     }
 }
     

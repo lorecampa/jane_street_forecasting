@@ -41,13 +41,16 @@ class AgentTreeRegressor(AgentRegressor):
         for seed in tqdm(self.seeds):
             callbacks = []
             if self.agent_type == 'lgbm':
-                callbacks.append(log_evaluation(period=20))
+                callbacks = [log_evaluation(period=20)]
+                curr_agent = self.agent_class(**model_args, random_state=seed)    
+                curr_agent.fit(X, y, callbacks=callbacks)
             elif self.agent_type == 'xgb':
-                pass
+                curr_agent = self.agent_class(**model_args, random_state=seed)    
+                curr_agent.fit(X, y)
             elif self.agent_type == 'catboost':
-                pass
-            curr_agent = self.agent_class(**model_args, random_state=seed)    
-            curr_agent.fit(X, y, callbacks=callbacks)
+                curr_agent = self.agent_class(**model_args, random_state=seed)    
+                curr_agent.fit(X, y)
+                
             self.agents.append(curr_agent)
             
         return self.agents

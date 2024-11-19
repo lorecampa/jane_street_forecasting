@@ -5,6 +5,7 @@ import random
 import polars as pl
 import gc
 import numpy as np
+import polars.selectors as cs
 
 
 
@@ -83,6 +84,10 @@ def set_random_seed(seed: int) -> None:
 def load_json(path: str | Path) -> dict | None:
     with open(path, 'r') as file:
         return json.load(file)
+
+def load_pickle(path: str | Path) -> dict | None:
+    with open(path, 'r') as file:
+        return pickle.load(file)
     
 def save_dict_to_json(d: dict, path: str | Path, indent=4):
     if isinstance(path, str):
@@ -106,3 +111,14 @@ def merge_dicts(dicts: list[dict]) -> dict:
                 final_dict[key] = []
             final_dict[key].append(value)
     return final_dict
+
+
+def check_for_inf(df: pl.DataFrame):
+    rows_with_inf = df.select(cs.numeric().is_infinite()).select(
+        pl.sum_horizontal(pl.all()).alias('sum_infinite')
+    ).filter(pl.col('sum_infinite') > 0).shape[0]
+
+    cols_with_inf = df.select(cs.numeric().is_infinite())\
+        .sum().transpose(include_header=True, header_name='column', column_names=['sum_infinite'])\
+        .filter(pl.col('sum_infinite') > 0).to_dicts()
+    return rows_with_inf, cols_with_inf
