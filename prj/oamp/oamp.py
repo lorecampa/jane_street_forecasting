@@ -1,11 +1,13 @@
+import gc
 import os
+import typing
 import matplotlib.pyplot as plt
 import numpy as np
 
 from collections import deque
 
-from oamp.oamp_config import ConfigOAMP
-from oamp.oamp_utils import (
+from prj.oamp.oamp_config import ConfigOAMP
+from prj.oamp.oamp_utils import (
     get_m,
     get_p,
     get_r,
@@ -13,20 +15,20 @@ from oamp.oamp_utils import (
     upd_w,
 )
 
-
 class OAMP:
     def __init__(
         self,
-        episodes_len: int,
         agents_count: int,
         args: ConfigOAMP,
     ):
-        self.max_step = episodes_len
         # Initializing agents
         self.agents_count = agents_count
-        self.agents_rewards = []
-        self.agents_returns = deque(maxlen=args.loss_fn_window)
+        self.agents_losses = self.init_agents_losses(args.loss_fn_window)
+        
+        self.agents_weights_upd_freq = args.agents_weights_upd_freq #TODO: update daily? Can be removed as parameter
+        
         # Initializing OAMP
+        self.t = 0
         self.l_tm1 = np.zeros(agents_count)
         self.n_tm1 = np.ones(agents_count) * 0.25
         self.w_tm1 = np.ones(agents_count) / agents_count
@@ -34,29 +36,35 @@ class OAMP:
         self.cum_err = np.zeros(agents_count)
         # Initializing OAMP stats
         self.stats = {
-            "agents_losses": [],
-            "agents_rewards": [],
-            "agents_weights": [],
-            "ensemble_rewards": [],
+            "losses": [],
+            "weights": [],
         }
+        
+    def init_agents_losses(
+        self,
+        loss_fn_window: int,
+    ):
+        return deque(maxlen=loss_fn_window)
 
     def step(
         self,
-        agents_rewards: np.ndarray,
-        agents_actions: np.ndarray,
-        ensemble_reward: float,
+        agents_losses: np.ndarray,
+        agents_predictions: np.ndarray,
     ):
-        # Updating agents' rewards
-        self.agents_rewards.append(agents_rewards)
-        self.stats["agents_losses"].append(self.l_tm1)
-        self.stats["agents_weights"].append(self.p_tm1)
-        self.stats['agents_rewards'].append(agents_rewards)
-        self.stats['ensemble_rewards'].append(ensemble_reward)
-        return self.compute_ensemble_action(agents_actions, self.p_tm1)
+        # Updating agents' losses
+        self.agents_losses.append(agents_losses)
+        # Updating agents' weights
+        if self.t > 0 and self.t % self.agents_weights_upd_freq == 0:
+            self.update_agents_weights()
+
+        # Updating timestep
+        self.t += 1
+        return self.compute_prediction(agents_predictions)
 
     def update_agents_weights(
         self,
     ):
+        # print(f'Updating agents weights at timestep {self.t}')
         # Computing agents' losses
         l_t = self.compute_agents_losses()
         # Computing agents' regrets estimates
@@ -87,16 +95,16 @@ class OAMP:
         self.n_tm1 = n_t
         self.w_tm1 = w_t
         self.p_tm1 = p_t
-        return self.p_tm1
+        self.stats["losses"].append(l_t)
+        self.stats["weights"].append(p_t)
+        return p_t
 
     def compute_agents_losses(
         self,
     ) -> np.ndarray:
-        # Updating agents' returns
-        self.agents_returns.append(np.sum(self.agents_rewards, axis=0))
-        self.agents_rewards = []
         # Computing agents' losses
-        agents_losses: np.ndarray = -np.sum(self.agents_returns, axis=0)
+        agents_losses: np.ndarray = np.sum(self.agents_losses, axis=0)
+        # print(f'Agents losses 1: {agents_losses}')
         # Normalizing agents' losses
         agents_losses_min = agents_losses.min()
         agents_losses_max = agents_losses.max()
@@ -104,35 +112,37 @@ class OAMP:
             agents_losses = (agents_losses - agents_losses_min) / (
                 agents_losses_max - agents_losses_min
             )
+            
+        # print(f'Agents losses 2: {agents_losses}')
         return agents_losses
 
-    def compute_ensemble_action(
+    def compute_prediction(
         self,
-        agents_actions: np.ndarray,
-        agents_weights: np.ndarray,
+        agents_predictions: np.ndarray,
     ) -> np.ndarray:
-        return np.argmax(agents_weights), agents_actions[np.argmax(agents_weights)]
-    
+        return np.sum(agents_predictions * self.p_tm1) / np.sum(self.p_tm1)
+
     def plot_stats(
         self,
-        save_path: str,
-        agents_names: list[str],
+        save_path: typing.Optional[str] = None,
     ):
-        agents_rewards = np.array(self.stats["agents_rewards"])
-        agents_losses = np.array(self.stats["agents_losses"])
-        agents_weights = np.array(self.stats["agents_weights"])
-        ensemble_rewards = np.array(self.stats["ensemble_rewards"])
-        fig, axs = plt.subplots(3, 1, figsize=(10, 15))
-        axs[0].plot(agents_rewards.cumsum(axis=0))
-        axs[0].plot(ensemble_rewards.cumsum(axis=0))
-        axs[0].set_title("Agents' Rewards")
+        agents = [f"Agent {n}" for n in range(self.agents_count)]
+        agents_losses = np.array(self.stats["losses"])
+        agents_weights = np.array(self.stats["weights"])
+        fig, axs = plt.subplots(2, 1, figsize=(10, 10))
+        axs[0].plot(agents_losses.cumsum(axis=0))
+        axs[0].set_title("Agents' Losses")
         axs[0].grid()
-        axs[1].plot(agents_losses.cumsum(axis=0))
-        axs[1].set_title("Agents' Losses")
+        axs[1].stackplot(np.arange(len(agents_weights)), np.transpose(agents_weights))
         axs[1].grid()
-        axs[2].stackplot(np.arange(len(agents_weights)), np.transpose(agents_weights))
-        axs[2].grid()
-        axs[2].set_title("Agents' Weights")
-        fig.legend(labels=agents_names+['multi-agent'], loc="center left", bbox_to_anchor=(0.95, 0.5))
-        fig.savefig(os.path.join(save_path, "oamp_stats.png"), bbox_inches="tight")
+        axs[1].set_title("Agents' Weights")
+        fig.legend(labels=agents, loc="center left", bbox_to_anchor=(0.95, 0.5))
+        
+        if save_path is not None:
+            fig.savefig(os.path.join(save_path, "oamp_stats.png"), bbox_inches="tight")
+        else:
+            plt.tight_layout()
+            plt.show()
+            
         plt.close(fig)
+        gc.collect()

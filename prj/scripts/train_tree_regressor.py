@@ -89,9 +89,10 @@ class RegressorTrainer:
     @staticmethod
     def prepare_dataset(partition_ids: list[int]):
         train_ds = pl.concat([
-            pl.scan_parquet(DATA_DIR / 'train' / f'partition_id={i}' / 'part-0.parquet')
+            pl.read_parquet(DATA_DIR / 'train' / f'partition_id={i}' / 'part-0.parquet')
             for i in partition_ids
-        ]).sort('date_id', 'time_id', 'symbol_id').collect()
+        ]).sort('date_id', 'time_id', 'symbol_id')
+        
         features = [col for col in train_ds.columns if col.startswith('feature_')]
         target_feature = 'responder_6'
         
@@ -103,10 +104,12 @@ class RegressorTrainer:
         y = train_ds[target_feature].cast(pl.Float32).to_numpy()
         w = train_ds['weight'].cast(pl.Float32).to_numpy()
         
-        return X, y, w
+        info = train_ds.select(['date_id', 'time_id', 'symbol_id']).cast(pl.Int32).to_numpy()
+        
+        return X, y, w, info
         
     def train(self, partition_ids: list[int], model_args: dict = {}, save_path: typing.Optional[str] = None):
-        X, y, _ = self.prepare_dataset(partition_ids)
+        X, y, _, _ = self.prepare_dataset(partition_ids)
         self.agent.train(X, y, model_args=model_args)
         print(f'Training completed')
         
@@ -115,7 +118,7 @@ class RegressorTrainer:
             self.agent.save(save_path)
     
     def evaluate(self, partition: int, save_path: typing.Optional[str] = None):
-        X, y, w = self.prepare_dataset([partition])
+        X, y, w, _ = self.prepare_dataset([partition])
         result = self.agent.evaluate(X, y, weights=w)
         if save_path is not None:
             os.makedirs(save_path, exist_ok=True)
