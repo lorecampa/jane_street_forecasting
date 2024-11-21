@@ -106,10 +106,34 @@ def sample_xgb_params(trial: optuna.Trial, additional_args: dict) -> dict:
     return params
 
 
+def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict) -> dict:
+    params = {
+            'use_gaussian_noise': trial.suggest_categorical('use_gaussian_noise', [True, False]),
+            'numerical_transform': trial.suggest_categorical('numerical_transform', ['min-max', 'quantile-normal', 'yeo-johnson']),
+        }
+    if params['use_gaussian_noise']:
+        params['gaussian_noise_std'] = trial.suggest_float('gaussian_noise_std', 1e-3, 1)    
+    
+    return params
+
+def sample_mlp_params(trial: optuna.Trial, additional_args: dict) -> dict:
+    params = _sample_base_neural_params(trial, additional_args)
+    params.update({
+        'n_layers': trial.suggest_int('n_layers', 1, 5),
+        'start_units': trial.suggest_int('start_units', 64, 512),
+        'units_decay': trial.suggest_categorical('units_decay', [1, 1.5, 2, 2.5, 3]),
+        'dropout_rate': trial.suggest_float('dropout_rate', 0.01, 0.4),
+        'l1_lambda': trial.suggest_float('l1_lambda', 1e-5, 1e-2, log=True),
+        'l2_lambda': trial.suggest_float('l2_lambda', 1e-5, 1e-2, log=True),
+        'activation': trial.suggest_categorical('activation', ['relu', 'sigmoid', 'tanh', 'swish'])
+    })
+    return params
+
 
 SAMPLER = {
     "oamp": sample_oamp_params,
     "lgbm": sample_lgbm_params,
     "catboost": sample_catboost_params,
-    "xgb": sample_xgb_params
+    "xgb": sample_xgb_params,
+    "mlp": sample_mlp_params,
 }

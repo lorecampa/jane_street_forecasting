@@ -20,12 +20,12 @@ class OAMP:
         self,
         agents_count: int,
         args: ConfigOAMP,
+        groups: typing.List[int],
     ):
         # Initializing agents
         self.agents_count = agents_count
         self.agents_losses = self.init_agents_losses(args.loss_fn_window)
-        
-        self.agents_weights_upd_freq = args.agents_weights_upd_freq #TODO: update daily? Can be removed as parameter
+        self.agents_weights_upd_freq = args.agents_weights_upd_freq # Right now it is measured in groups
         
         # Initializing OAMP
         self.t = 0
@@ -34,6 +34,11 @@ class OAMP:
         self.w_tm1 = np.ones(agents_count) / agents_count
         self.p_tm1 = np.ones(agents_count) / agents_count
         self.cum_err = np.zeros(agents_count)
+        
+        # Other parameters
+        self.groups = groups
+        self.curr_group_idx = 0
+        
         # Initializing OAMP stats
         self.stats = {
             "losses": [],
@@ -54,11 +59,14 @@ class OAMP:
         # Updating agents' losses
         self.agents_losses.append(agents_losses)
         # Updating agents' weights
-        if self.t > 0 and self.t % self.agents_weights_upd_freq == 0:
+        if self.t == 0 and self.curr_group_idx > 0 and self.curr_group_idx % self.agents_weights_upd_freq == 0:
             self.update_agents_weights()
 
         # Updating timestep
         self.t += 1
+        if self.t == self.groups[self.curr_group_idx]:
+            self.curr_group_idx += 1
+            self.t = 0
         return self.compute_prediction(agents_predictions)
 
     def update_agents_weights(
@@ -104,7 +112,6 @@ class OAMP:
     ) -> np.ndarray:
         # Computing agents' losses
         agents_losses: np.ndarray = np.sum(self.agents_losses, axis=0)
-        # print(f'Agents losses 1: {agents_losses}')
         # Normalizing agents' losses
         agents_losses_min = agents_losses.min()
         agents_losses_max = agents_losses.max()
@@ -113,7 +120,6 @@ class OAMP:
                 agents_losses_max - agents_losses_min
             )
             
-        # print(f'Agents losses 2: {agents_losses}')
         return agents_losses
 
     def compute_prediction(

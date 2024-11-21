@@ -1,7 +1,9 @@
+from datetime import timedelta
 import json
 from pathlib import Path
 import pickle
 import random
+import typing
 import polars as pl
 import gc
 import numpy as np
@@ -122,3 +124,45 @@ def check_for_inf(df: pl.DataFrame):
         .sum().transpose(include_header=True, header_name='column', column_names=['sum_infinite'])\
         .filter(pl.col('sum_infinite') > 0).to_dicts()
     return rows_with_inf, cols_with_inf
+
+
+                
+def build_rolling_stats(df: pl.DataFrame, cols: list = None, window: int = 30, group_by: list[str] = ['symbol_id']) -> pl.DataFrame:
+    time_cols = ['date_id', 'time_id']
+    df = df.select(time_cols + group_by + cols).sort(time_cols)
+    timestep_id_df = df.select(time_cols).unique(maintain_order=True).with_row_index('index')
+    df = df.join(timestep_id_df, on=time_cols, how='left')
+    
+    df = df.rolling(
+        'index',
+        period=f"{window}i",
+        group_by=group_by
+    ).agg(
+        pl.col(cols).mean().name.suffix('_rm'),
+        pl.col(cols).std(ddof=0).name.suffix('_rstd')
+    )
+    return df.join(timestep_id_df, on='index', how='left').drop('index')
+    
+
+    
+
+def moving_z_score_norm(df: pl.DataFrame, rolling_stats_df: pl.DataFrame, cols: list, eps:float=1e-6, clip_bound:typing.Optional[float]=None, group_by:list[str]=['symbol_id']) -> pl.DataFrame:
+    assert eps > 0, 'eps must be greater than 0'
+    assert all({f'{col}_rm', f'{col}_rstd'}.issubset(rolling_stats_df.columns) for col in cols), 'One or more columns not found in the rolling stats DataFrame'    
+    assert clip_bound is None or clip_bound >= 0, "Clip bound should be None or greater that zero"
+    
+    time_cols = ['date_id', 'time_id']
+    
+
+    df = df.join(rolling_stats_df, how='left', on=time_cols + group_by)\
+        .with_columns(
+            *[((pl.col(col) - pl.col(f'{col}_rm')) / (pl.col(f'{col}_rstd') + eps))\
+                .clip(
+                    lower_bound=-clip_bound if clip_bound else None, 
+                    upper_bound=clip_bound if clip_bound else None
+                ).alias(col) for col in cols]
+        ).drop([col for col in rolling_stats_df.columns if col not in time_cols + group_by])
+    
+    return df
+    
+    

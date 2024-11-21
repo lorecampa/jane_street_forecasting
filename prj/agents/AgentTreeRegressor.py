@@ -56,7 +56,7 @@ class AgentTreeRegressor(AgentRegressor):
         return self.agents
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return np.mean([agent.predict(X) for agent in self.agents], axis=0)
+        return np.mean([agent.predict(X).clip(-5, 5) for agent in self.agents], axis=0) # Clip since the target is in [-5, 5]
     
     def save(self, path: str):
         for i, seed in enumerate(self.seeds):
