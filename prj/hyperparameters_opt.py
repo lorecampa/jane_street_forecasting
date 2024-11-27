@@ -11,9 +11,9 @@ def sample_oamp_params(trial: optuna.Trial, additional_args: dict) -> dict:
 def sample_lgbm_params(trial: optuna.Trial, additional_args: dict) -> dict:
     use_gpu = additional_args.get("use_gpu", False)
     params = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 5000, log=True),
-            "max_depth": trial.suggest_int("max_depth", 3, 12),
-            "num_leaves": trial.suggest_int("num_leaves", 8, 1024),
+            "n_estimators": trial.suggest_int("n_estimators", 10, 1000, log=True),
+            "max_depth": trial.suggest_int("max_depth", 2, 12),
+            "num_leaves": trial.suggest_int("num_leaves", 4, 1024),
             "subsample_freq": trial.suggest_int("subsample_freq", 1, 20),
             "subsample": trial.suggest_float("subsample", 0.1, 0.7),
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.1),
@@ -101,18 +101,19 @@ def sample_xgb_params(trial: optuna.Trial, additional_args: dict) -> dict:
         'colsample_bytree': trial.suggest_float('colsample_bytree', 0.1, 0.8),
         "enable_categorical": True, #TODO: should it be false?
         "device": "gpu" if use_gpu else "cpu",
-    }
-    
+    }    
     return params
-
 
 def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict) -> dict:
     params = {
             'use_gaussian_noise': trial.suggest_categorical('use_gaussian_noise', [True, False]),
             'numerical_transform': trial.suggest_categorical('numerical_transform', ['min-max', 'quantile-normal', 'yeo-johnson']),
+            # 'learning_rate': trial.suggest_float('learning_rate', 5e-5, 1e-1, log=True),
+            'learning_rate': 1e-3,
         }
     if params['use_gaussian_noise']:
-        params['gaussian_noise_std'] = trial.suggest_float('gaussian_noise_std', 1e-3, 1)    
+        params['gaussian_noise_std'] = trial.suggest_float('gaussian_noise_std', 1e-3, 1)
+        
     
     return params
 

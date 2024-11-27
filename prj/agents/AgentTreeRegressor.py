@@ -11,6 +11,7 @@ from prj.agents.AgentRegressor import AgentRegressor
 import joblib
 import polars as pl
 from prj.config import DATA_DIR
+from prj.utils import set_random_seed
 
 TREE_NAME_MODEL_CLASS_DICT = {
     'lgbm': LGBMRegressor,
@@ -23,40 +24,35 @@ class AgentTreeRegressor(AgentRegressor):
     def __init__(
         self,
         agent_type: str,
+        seeds: typing.Optional[list[int]] = None,
         n_seeds: int = 1,
     ):
-        self.agent_type = agent_type
-        self.agent_class: typing.Union[LGBMRegressor, CatBoostRegressor, XGBRegressor] = TREE_NAME_MODEL_CLASS_DICT[agent_type]
-        self.agents = []
-        self.n_seeds = n_seeds
-        np.random.seed()
-        self.seeds = sorted([np.random.randint(2**32 - 1, dtype="int64").item() for i in range(self.n_seeds)])
+        super().__init__(agent_type, seeds=seeds, n_seeds=n_seeds)
+        
+        self.agent_class: typing.Union[LGBMRegressor, CatBoostRegressor, XGBRegressor] = TREE_NAME_MODEL_CLASS_DICT[self.agent_type]
+        self.agents: list[typing.Union[LGBMRegressor, CatBoostRegressor, XGBRegressor]] = []
         
     
     
-    def train(self, X: np.ndarray, y: np.ndarray, model_args: dict = {}):
-        if len(self.agents) > 0:
-            warnings.warn("Agent is already trained. Retraining...")
+    def train(self, X: np.ndarray, y: np.ndarray, sample_weight: np.ndarray, model_args: dict = {}, learn_args: dict = {}):
         self.agents = []
         for seed in tqdm(self.seeds):
+            set_random_seed(seed)
             callbacks = []
             if self.agent_type == 'lgbm':
                 callbacks = [log_evaluation(period=20)]
                 curr_agent = self.agent_class(**model_args, random_state=seed)    
-                curr_agent.fit(X, y, callbacks=callbacks)
+                curr_agent.fit(X, y, callbacks=callbacks, sample_weight=sample_weight, **learn_args)
             elif self.agent_type == 'xgb':
                 curr_agent = self.agent_class(**model_args, random_state=seed)    
-                curr_agent.fit(X, y)
+                curr_agent.fit(X, y, sample_weight=sample_weight, **learn_args)
             elif self.agent_type == 'catboost':
                 curr_agent = self.agent_class(**model_args, random_state=seed)    
-                curr_agent.fit(X, y)
+                curr_agent.fit(X, y, sample_weight=sample_weight, **learn_args)
                 
             self.agents.append(curr_agent)
             
         return self.agents
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        return np.mean([agent.predict(X).clip(-5, 5) for agent in self.agents], axis=0) # Clip since the target is in [-5, 5]
     
     def save(self, path: str):
         for i, seed in enumerate(self.seeds):
