@@ -1,12 +1,17 @@
+from pathlib import Path
+import typing
 from prj.config import DATA_DIR
 import polars as pl
 
 class DataLoader:
     def __init__(
         self, 
-        data_dir: str = DATA_DIR,
+        data_dir: typing.Union[str | Path] = DATA_DIR,
         **kwargs,
     ):
+        if isinstance(data_dir, str):
+            data_dir = Path(data_dir)
+        
         self.data_dir = data_dir
         self.ffill = kwargs.get('ffill', True)
         
