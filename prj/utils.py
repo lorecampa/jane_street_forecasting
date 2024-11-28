@@ -1,3 +1,5 @@
+import argparse
+import ast
 from datetime import timedelta
 import json
 from pathlib import Path
@@ -8,6 +10,8 @@ import polars as pl
 import gc
 import numpy as np
 import polars.selectors as cs
+import tensorflow as tf
+import torch as th
 
 
 
@@ -71,16 +75,31 @@ def reduce_mem_usage(df: pl.DataFrame, verbose:bool = False):
     
     return df
 
-def set_random_seed(seed: int) -> None:
+def set_random_seed(seed: int, using_cuda: bool = False) -> None:
     """
     Seed the different random generators.
 
     :param seed:
+    :param using_cuda:
     """
     # Seed python RNG
     random.seed(seed)
     # Seed numpy RNG
     np.random.seed(seed)
+    # seed the RNG for all devices (both CPU and CUDA)
+    th.manual_seed(seed)
+    
+    # Set the tensorflow seed
+    tf.random.set_seed(seed)
+
+    
+    if using_cuda:
+        # Deterministic operations for CuDNN, it may impact performances
+        th.backends.cudnn.deterministic = True
+        th.backends.cudnn.benchmark = False
+        
+        # Tensorflow determinism
+        tf.config.experimental.enable_op_determinism()
     
 
 def load_json(path: str | Path) -> dict | None:
@@ -166,3 +185,25 @@ def moving_z_score_norm(df: pl.DataFrame, rolling_stats_df: pl.DataFrame, cols: 
     return df
     
     
+def get_null_count(df: pl.DataFrame):
+    n_rows = df.shape[0]
+    return df.fill_nan(None).null_count().transpose(include_header=True).sort('column_0', descending=True).rename({'column_0': 'count'}).with_columns(
+        pl.col('count').truediv(n_rows).mul(100).alias('count (%)'),
+    )
+    
+
+def interquartile_mean(data: np.ndarray, q_min: int = 25, q_max: int = 75) -> float:
+    assert data.ndim == 1, "Input data must be 1D"
+    sorted_data = np.sort(data)
+    
+    q_min = np.percentile(sorted_data, q_min)
+    q_max = np.percentile(sorted_data, q_max)
+    filtered_data = sorted_data[(sorted_data >= q_min) & (sorted_data <= q_max)]    
+    iqm = np.mean(filtered_data)
+    return iqm
+
+def str_to_dict_arg(string):
+    try:
+        return ast.literal_eval(string)
+    except (ValueError, SyntaxError) as e:
+        raise argparse.ArgumentTypeError(f"Invalid dictionary string: {string}") from e
