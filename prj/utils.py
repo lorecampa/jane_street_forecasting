@@ -1,3 +1,5 @@
+import argparse
+import ast
 from datetime import timedelta
 import json
 from pathlib import Path
@@ -182,3 +184,9 @@ def interquartile_mean(data: np.ndarray, q_min: int = 25, q_max: int = 75) -> fl
     filtered_data = sorted_data[(sorted_data >= q_min) & (sorted_data <= q_max)]    
     iqm = np.mean(filtered_data)
     return iqm
+
+def str_to_dict_arg(string):
+    try:
+        return ast.literal_eval(string)
+    except (ValueError, SyntaxError) as e:
+        raise argparse.ArgumentTypeError(f"Invalid dictionary string: {string}") from e

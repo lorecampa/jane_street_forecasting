@@ -108,8 +108,7 @@ def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict) -> di
     params = {
             'use_gaussian_noise': trial.suggest_categorical('use_gaussian_noise', [True, False]),
             'numerical_transform': trial.suggest_categorical('numerical_transform', ['min-max', 'quantile-normal', 'yeo-johnson']),
-            # 'learning_rate': trial.suggest_float('learning_rate', 5e-5, 1e-1, log=True),
-            'learning_rate': 1e-3,
+            'learning_rate': trial.suggest_float('learning_rate', 5e-5, 1e-1, log=True),
         }
     if params['use_gaussian_noise']:
         params['gaussian_noise_std'] = trial.suggest_float('gaussian_noise_std', 1e-3, 1)

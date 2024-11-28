@@ -13,6 +13,7 @@ from prj.data_loader import DataLoader
 from prj.hyperparameters_opt import SAMPLER
 from prj.model.nn.neural import TabularNNModel
 from prj.tuner import Tuner
+from prj.utils import str_to_dict_arg
 
 
 
@@ -83,6 +84,12 @@ def get_cli_args():
         help='Enable verbose',
         default=0
     )
+    parser.add_argument(
+        '--custom_args',
+        type=str_to_dict_arg,
+        default='{}',
+        help="Custom arguments in dictionary format"
+    )
 
     return parser.parse_args()
 
@@ -144,7 +151,9 @@ if __name__ == "__main__":
         n_seeds=args.n_seeds,
         verbose=args.verbose,
         storage=storage,
-        n_trials=args.n_trials
+        n_trials=args.n_trials,
+        custom_args=args.custom_args
+
     )
     optimizer.create_study()
     optimizer.run()

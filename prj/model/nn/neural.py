@@ -151,7 +151,8 @@ class TabularNNModel(ABC):
             pl.DataFrame(fit_history).write_csv(os.path.join(checkpoint_dir, 'history.csv'))
         
     def predict(self, X, batch_size=256, **kwargs):
-        return self.model.predict(X, batch_size=batch_size, **kwargs)        
+        pred = self.model.predict(X, batch_size=batch_size, **kwargs)
+        return pred.flatten() if pred.shape[1] == 1 else pred
         
     def summary(self, expand_nested=True, **kwargs):
         self.model.summary(expand_nested=expand_nested, **kwargs)

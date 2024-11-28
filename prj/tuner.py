@@ -76,10 +76,10 @@ class Tuner:
             self.train(model_params)
             
             train_metrics = self.model.evaluate(*self.train_data)
-            trial.set_user_attr("train_metrics", train_metrics)
+            trial.set_user_attr("train_metrics", str(train_metrics))
 
             val_metrics = self.model.evaluate(*self.val_data)
-            trial.set_user_attr("val_metrics", val_metrics)
+            trial.set_user_attr("val_metrics", str(val_metrics))
             
             
             if trial.number > 1:

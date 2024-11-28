@@ -47,7 +47,6 @@ class AgentRegressor(AgentBase):
     
     def evaluate(self, X: np.ndarray, y: np.ndarray, weights: np.ndarray = None) -> float:
         y_pred = self.predict(X)
-        print('AAAA: ', y_pred.shape, y.shape)
         return {
             'r2_w': weighted_r2(y, y_pred, weights=weights),
             'mae_w': weighted_mae(y, y_pred, weights=weights),

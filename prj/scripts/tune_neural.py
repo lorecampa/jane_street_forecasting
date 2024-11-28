@@ -1,3 +1,4 @@
+import ast
 from datetime import datetime
 import gc
 import numpy as np
@@ -13,6 +14,7 @@ from prj.data_loader import DataLoader
 from prj.hyperparameters_opt import SAMPLER
 from prj.model.nn.neural import TabularNNModel
 from prj.tuner import Tuner
+from prj.utils import str_to_dict_arg
 
 
 
@@ -83,6 +85,12 @@ def get_cli_args():
         help='Enable verbose',
         default=0
     )
+    parser.add_argument(
+        '--custom_args',
+        type=str_to_dict_arg,
+        default='{}',
+        help="Custom arguments in dictionary format"
+    )
 
     return parser.parse_args()
 
@@ -115,8 +123,8 @@ class NeuralTuner(Tuner):
             X, y, w,
             model_args=model_args,
             validation_data=self.val_data,
-            epochs=2,
-            early_stopping_rounds=3
+            epochs=20,
+            early_stopping_rounds=5
         )
         gc.collect()
                     
@@ -147,7 +155,8 @@ if __name__ == "__main__":
         verbose=args.verbose,
         storage=storage,
         n_trials=args.n_trials,
-        data_dir = data_dir
+        data_dir = data_dir,
+        custom_args=args.custom_args
     )
     
     
