@@ -10,6 +10,8 @@ import polars as pl
 import gc
 import numpy as np
 import polars.selectors as cs
+import tensorflow as tf
+import torch as th
 
 
 
@@ -73,16 +75,31 @@ def reduce_mem_usage(df: pl.DataFrame, verbose:bool = False):
     
     return df
 
-def set_random_seed(seed: int) -> None:
+def set_random_seed(seed: int, using_cuda: bool = False) -> None:
     """
     Seed the different random generators.
 
     :param seed:
+    :param using_cuda:
     """
     # Seed python RNG
     random.seed(seed)
     # Seed numpy RNG
     np.random.seed(seed)
+    # seed the RNG for all devices (both CPU and CUDA)
+    th.manual_seed(seed)
+    
+    # Set the tensorflow seed
+    tf.random.set_seed(seed)
+
+    
+    if using_cuda:
+        # Deterministic operations for CuDNN, it may impact performances
+        th.backends.cudnn.deterministic = True
+        th.backends.cudnn.benchmark = False
+        
+        # Tensorflow determinism
+        tf.config.experimental.enable_op_determinism()
     
 
 def load_json(path: str | Path) -> dict | None:

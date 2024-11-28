@@ -1,7 +1,9 @@
 import gc
 import os
+import shutil
 import numpy as np
 import optuna
+from prj.agents.AgentRegressor import AgentRegressor
 from prj.config import DATA_DIR, GLOBAL_SEED
 from prj.hyperparameters_opt import SAMPLER
 
@@ -41,10 +43,13 @@ class Tuner:
             self.n_seeds = 1
             self.seeds = [GLOBAL_SEED]
         
+        self.model: AgentRegressor = None
         self.custom_model_args = custom_model_args
         self.model_args = {}
         self.custom_learn_args = custom_learn_args
         self.learn_args = {}
+        
+        
         # Optuna
         self.storage = storage
         self.n_trials = n_trials
@@ -78,8 +83,7 @@ class Tuner:
         os.makedirs(self.out_dir, exist_ok=True)
         os.makedirs(self.optuna_dir, exist_ok=True)
 
-        
-                            
+          
     def optimize_hyperparameters(self, metric: str = 'r2_w'):
         def objective(trial):
             model_args: dict = SAMPLER[self.model_type](trial).copy()
@@ -106,7 +110,7 @@ class Tuner:
         
         print(f"Optimizing {self.model_class.__name__} hyperparameters")
         print(f'Using seeds: {self.seeds}')
-        self.study.optimize(objective, n_trials=self.n_trials)
+        self.study.optimize(objective, n_trials=self.n_trials, callbacks=[self._bootstrap_trial])
     
     def _plot_results(self, trial):
         plots = [
@@ -119,6 +123,22 @@ class Tuner:
         os.makedirs(optuna_plot_dir, exist_ok=True)
         for filename, fig in plots:
             fig.write_image(f"{optuna_plot_dir}/{filename}")
+            
+            
+    
+    def _bootstrap_trial(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial) -> None:
+        if trial.state in [optuna.trial.TrialState.PRUNED, optuna.trial.TrialState.FAIL]:
+            return None
+        if trial.number == study.best_trial.number:
+            print(f'Best trial found: {trial.number}')
+            
+            best_dir_path = f'{self.out_dir}/best_trial'
+            if os.path.exists(best_dir_path):
+                shutil.rmtree(best_dir_path)
+            
+            best_dir_saved_model_path = f'{best_dir_path}/saved_model'
+            os.makedirs(best_dir_saved_model_path, exist_ok=True)
+            self.model.save(best_dir_saved_model_path)
     
     def run(self):
         self.optimize_hyperparameters()
