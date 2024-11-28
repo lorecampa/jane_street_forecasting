@@ -53,6 +53,11 @@ def get_cli_args():
         default=6,
         help="ending val partition(included) "
     )
+    parser.add_argument(
+        '--data_dir',
+        type=str,
+        default=None
+    )
     
     parser.add_argument(
         '--n_trials',
@@ -89,6 +94,7 @@ class TreeTuner:
         end_partition: int,
         start_val_partition: int,
         end_val_partition: int,
+        data_dir: str = DATA_DIR,
         out_dir: str = '.',
         n_seeds: int = None,
         storage: str = None,
@@ -130,7 +136,8 @@ class TreeTuner:
         data_args = {
             'ffill': False
         }
-        self.data_loader = DataLoader(**data_args)
+        self.data_dir = data_dir
+        self.data_loader = DataLoader(data_dir=self.data_dir, **data_args)
         self.train_data = self.data_loader.load_partitions(self.start_partition, self.end_partition)
         self.val_data = self.data_loader.load_partitions(self.start_val_partition, self.end_val_partition)
     
@@ -202,6 +209,7 @@ class TreeTuner:
 
 if __name__ == "__main__":
     args = get_cli_args()
+    data_dir = args.data_dir if args.data_dir is not None else DATA_DIR
     print(f'Tuning model: {args.model}')
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -215,6 +223,7 @@ if __name__ == "__main__":
         end_partition=args.end_partition,
         start_val_partition=args.start_val_partition,
         end_val_partition=args.end_val_partition,
+        data_dir=data_dir,
         out_dir=out_dir,
         n_seeds=args.n_seeds,
         verbose=args.verbose,

@@ -18,7 +18,6 @@ from prj.model.nn.neural import TabularNNModel
 def get_cli_args():
     """Create CLI parser and return parsed arguments"""
     parser = argparse.ArgumentParser()
-
     
     parser.add_argument(
         '--model',
@@ -73,6 +72,11 @@ def get_cli_args():
         default="."
     )
     parser.add_argument(
+        '--data_dir',
+        type=str,
+        default=None
+    )
+    parser.add_argument(
         '--verbose',
         type=int,
         help='Enable verbose',
@@ -89,6 +93,7 @@ class NeuralTuner:
         end_partition: int,
         start_val_partition: int,
         end_val_partition: int,
+        data_dir: str = DATA_DIR,
         out_dir: str = '.',
         n_seeds: int = None,
         storage: str = None,
@@ -129,7 +134,8 @@ class NeuralTuner:
         data_args = {
             'ffill': True
         }
-        self.data_loader = DataLoader(**data_args)
+        self.data_dir = data_dir
+        self.data_loader = DataLoader(data_dir=self.data_dir, **data_args)
         self.train_data = self.data_loader.load_partitions(self.start_partition, self.end_partition)
         self.val_data = self.data_loader.load_partitions(self.start_val_partition, self.end_val_partition)
     
@@ -202,6 +208,7 @@ class NeuralTuner:
 if __name__ == "__main__":
     args = get_cli_args()
     
+    data_dir = args.data_dir if args.data_dir is not None else DATA_DIR
     model_class = NEURAL_NAME_MODEL_CLASS_DICT[args.model]
     
     

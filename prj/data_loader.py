@@ -13,7 +13,7 @@ class DataLoader:
         
     
     def _get_partition_path(self, partition_id):
-        path = self.data_dir / 'train' / f'partition_id={partition_id}'
+        path = self.data_dir / f'partition_id={partition_id}'
         if self.ffill:
             path = path / 'part-0_ffill.parquet'
         else:
