@@ -1,14 +1,14 @@
 import optuna
 from lightgbm import LGBMRegressor
 
-def sample_oamp_params(trial: optuna.Trial, additional_args: dict) -> dict:
+def sample_oamp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     params = {
         "agents_weights_upd_freq": trial.suggest_int("agents_weights_upd_freq", 1, 10),
         "loss_fn_window": trial.suggest_int("loss_fn_window", 1, 10),
     }
     return params
     
-def sample_lgbm_params(trial: optuna.Trial, additional_args: dict) -> dict:
+def sample_lgbm_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     use_gpu = additional_args.get("use_gpu", False)
     params = {
             "n_estimators": trial.suggest_int("n_estimators", 10, 1000, log=True),
@@ -37,7 +37,7 @@ def sample_lgbm_params(trial: optuna.Trial, additional_args: dict) -> dict:
     
     return params
 
-def sample_catboost_params(trial: optuna.Trial, additional_args: dict) -> dict:
+def sample_catboost_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     use_gpu = additional_args.get("use_gpu", False)
     params = {
             'iterations': trial.suggest_int('iterations', 100, 5000, step=10),
@@ -84,7 +84,7 @@ def sample_catboost_params(trial: optuna.Trial, additional_args: dict) -> dict:
     return params
         
         
-def sample_xgb_params(trial: optuna.Trial, additional_args: dict) -> dict:
+def sample_xgb_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     use_gpu = additional_args.get("use_gpu", False)
     params = {
         'n_estimators': trial.suggest_int('n_estimators', 100, 5000, log=True),
@@ -104,7 +104,7 @@ def sample_xgb_params(trial: optuna.Trial, additional_args: dict) -> dict:
     }    
     return params
 
-def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict) -> dict:
+def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     params = {
             'use_gaussian_noise': trial.suggest_categorical('use_gaussian_noise', [True, False]),
             'numerical_transform': trial.suggest_categorical('numerical_transform', ['min-max', 'quantile-normal', 'yeo-johnson']),
@@ -116,7 +116,7 @@ def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict) -> di
     
     return params
 
-def sample_mlp_params(trial: optuna.Trial, additional_args: dict) -> dict:
+def sample_mlp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     params = _sample_base_neural_params(trial, additional_args)
     params.update({
         'n_layers': trial.suggest_int('n_layers', 1, 5),

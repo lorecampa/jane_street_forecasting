@@ -41,10 +41,8 @@ class AgentNeuralRegressor(AgentRegressor):
         X: np.ndarray, 
         y: np.ndarray, 
         sample_weight: typing.Optional[np.ndarray] = None, 
-        model_args: dict = {}, 
-        validation_data: typing.Optional[typing.Tuple[np.ndarray, np.ndarray, np.ndarray]] = None, 
-        epochs: int = 10, 
-        early_stopping_rounds:int=5
+        model_args: dict = {},
+        learn_args: dict = {},
     ):        
         self.agents = []
         for seed in tqdm(self.seeds):
@@ -55,22 +53,24 @@ class AgentNeuralRegressor(AgentRegressor):
                 warnings.warn("Learning rate not provided. Using default value 1e-3")
             learning_rate = curr_model_args.pop('learning_rate')
             
-            curr_agent: TabularNNModel = self.agent_class(**model_args, random_seed=seed)
+            curr_agent: TabularNNModel = self.agent_class(**curr_model_args, random_seed=seed)
             set_random_seed(seed) #TODO: set cuda determinism
             
             optimizer = tfko.Adam(learning_rate=learning_rate)
             loss = WeightedZeroMeanR2Loss()
             metrics = [tfkm.R2Score(), tfkm.MeanSquaredError()]
+            
+            
             curr_agent.fit(
                 X, 
                 y,
                 sample_weight=sample_weight,
-                validation_data=validation_data,
+                validation_data=learn_args.get('validation_data', None),
                 loss=loss,
                 optimizer=optimizer,
                 metrics=metrics,
-                epochs=epochs,
-                early_stopping_rounds=early_stopping_rounds,
+                epochs=learn_args.get('epochs', 20),
+                early_stopping_rounds=learn_args.get('early_stopping_rounds', 5),
             )
                 
             self.agents.append(curr_agent)

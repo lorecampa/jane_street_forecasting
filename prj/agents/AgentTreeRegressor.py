@@ -34,7 +34,13 @@ class AgentTreeRegressor(AgentRegressor):
         
     
     
-    def train(self, X: np.ndarray, y: np.ndarray, sample_weight: np.ndarray, model_args: dict = {}, learn_args: dict = {}):
+    def train(self, 
+              X: np.ndarray, 
+              y: np.ndarray, 
+              sample_weight: np.ndarray, 
+              model_args: dict = {}, 
+              learn_args: dict = {}
+    ):
         self.agents = []
         for seed in tqdm(self.seeds):
             set_random_seed(seed)

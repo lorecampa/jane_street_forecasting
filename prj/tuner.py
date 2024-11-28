@@ -20,7 +20,8 @@ class Tuner:
         storage: str = None,
         n_trials: int = 50,
         verbose: int = 0,
-        custom_args: dict = {}
+        custom_model_args: dict = {},
+        custom_learn_args: dict = {}
     ):
         self.model_type = model_type
         self.data_dir = data_dir
@@ -40,7 +41,10 @@ class Tuner:
             self.n_seeds = 1
             self.seeds = [GLOBAL_SEED]
         
-        self.custom_args = custom_args
+        self.custom_model_args = custom_model_args
+        self.model_args = {}
+        self.custom_learn_args = custom_learn_args
+        self.learn_args = {}
         # Optuna
         self.storage = storage
         self.n_trials = n_trials
@@ -53,6 +57,14 @@ class Tuner:
         self._setup_directories()
         
     
+    def train(self, model_args:dict, learn_args: dict):
+        X, y, w = self.train_data
+        self.model.train(
+            X, y, w,
+            model_args=model_args,
+            learn_args=learn_args
+        )
+        gc.collect()
         
     def create_study(self):
         self.study = optuna.create_study(
@@ -70,10 +82,15 @@ class Tuner:
                             
     def optimize_hyperparameters(self, metric: str = 'r2_w'):
         def objective(trial):
-            model_params = SAMPLER[self.model_type](trial, additional_args={}).copy()
-            model_params.update(self.custom_args)
+            model_args: dict = SAMPLER[self.model_type](trial).copy()
+            model_args.update(self.custom_model_args)
+            model_args.update(self.model_args)
+            model_args.update(self.custom_model_args)
             
-            self.train(model_params)
+            learn_args = self.learn_args.copy()
+            learn_args.update(self.custom_learn_args)
+            
+            self.train(model_args=model_args, learn_args=learn_args)
             
             train_metrics = self.model.evaluate(*self.train_data)
             trial.set_user_attr("train_metrics", str(train_metrics))

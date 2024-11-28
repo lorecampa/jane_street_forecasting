@@ -23,7 +23,7 @@ START_VAL_PARTITION=8
 END_VAL_PARTITION=8
 MODEL=lgbm
 
-python prj/scripts/tune_tree.py \
+python prj/scripts/tune.py \
     --model $MODEL \
     --start_partition $START_PARTITION \
     --end_partition $END_PARTITION \
