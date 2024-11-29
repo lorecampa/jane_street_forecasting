@@ -1,5 +1,6 @@
 from datetime import datetime
 import argparse
+import os
 import optuna
 from prj.agents.AgentNeuralRegressor import NEURAL_NAME_MODEL_CLASS_DICT
 from prj.agents.AgentTreeRegressor import TREE_NAME_MODEL_CLASS_DICT
@@ -100,6 +101,14 @@ def get_cli_args():
         default='{}',
         help="Custom arguments in dictionary format"
     )
+    
+    parser.add_argument(
+        '--train',
+        action='store_true',
+        default=False,
+        help="Run only training, no optimization"
+    )
+
 
     return parser.parse_args()
 
@@ -171,12 +180,19 @@ class MultiTuner(Tuner):
 
 if __name__ == "__main__":
     args = get_cli_args()
+    assert (args.study_name is not None and args.storage is not None) or \
+       (args.study_name is None and args.storage is None), \
+       "Both 'study_name' and 'storage' must be provided together or omitted together."
+
     data_dir = args.data_dir if args.data_dir is not None else DATA_DIR
     print(f'Tuning model: {args.model}')
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    out_dir = f'{args.out_dir}_{timestamp}' if args.out_dir is not None else str(EXP_DIR / 'tuning' / f'{args.model}_{timestamp}')
+    study_name = args.study_name if args.study_name is not None else \
+        f'{args.model}_{args.n_seeds}seeds_{args.start_partition}_{args.end_partition}-{args.start_val_partition}_{args.end_val_partition}_{timestamp}'
+        
+    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / study_name)
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
 
     optimizer = MultiTuner(
@@ -190,11 +206,20 @@ if __name__ == "__main__":
         n_seeds=args.n_seeds,
         verbose=args.verbose,
         storage=storage,
-        study_name=args.study_name,
+        study_name=study_name,
         n_trials=args.n_trials,
         custom_model_args=args.custom_model_args,
         custom_learn_args=args.custom_learn_args
-
     )
     optimizer.create_study()
-    optimizer.run()
+
+    if args.train:
+        train_res, val_res = optimizer.train_best_trial()
+        print(f"Train: {train_res}, Val: {val_res}")
+        
+        save_path = f'{out_dir}/train/model'
+        os.makedirs(save_path, exist_ok=True)
+        optimizer.model.save(save_path)
+    else:
+        optimizer.run()
+    

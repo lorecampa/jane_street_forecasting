@@ -68,11 +68,23 @@ class Tuner:
         )
         gc.collect()
         
+    def train_best_trial(self):
+        best_trial = self.study.best_trial
+        model_args: dict = SAMPLER[self.model_type](best_trial).copy()
+        model_args.update(self.model_args)
+        model_args.update(self.custom_model_args)
+        
+        learn_args = self.learn_args.copy()
+        learn_args.update(self.custom_learn_args)
+        
+        self.train(model_args=model_args, learn_args=learn_args) 
+        
+        train_metrics = self.model.evaluate(*self.train_data)
+        val_metrics = self.model.evaluate(*self.val_data)  
+        return train_metrics, val_metrics
+        
     def create_study(self):
-        if self.study_name is None:
-            timestamp = self.out_dir.split('_')[-1]
-            self.study_name = f'{self.model_class.__name__}_{len(self.seeds)}seeds_{self.start_partition}_{self.end_partition}-{self.start_val_partition}_{self.end_val_partition}_{timestamp}'
-                 
+                         
         self.study = optuna.create_study(
             study_name=self.study_name,
             direction="maximize", 
@@ -83,7 +95,7 @@ class Tuner:
         is_study_loaded = len(self.study.trials) >= 1
         if is_study_loaded:
             print(f"Study {self.study_name} loaded with {len(self.study.trials)} trials, loading seeds")
-            self.seeds = sorted([int(seed) for seed in self.study.get_user_attrs('seeds')])
+            self.seeds = sorted([int(seed) for seed in self.study.user_attrs['seeds']])
             # Updating model seeds
             self.model.set_seeds(self.seeds)
         else:
@@ -100,7 +112,6 @@ class Tuner:
     def optimize_hyperparameters(self, metric: str = 'r2_w'):
         def objective(trial):
             model_args: dict = SAMPLER[self.model_type](trial).copy()
-            model_args.update(self.custom_model_args)
             model_args.update(self.model_args)
             model_args.update(self.custom_model_args)
             
