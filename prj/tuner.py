@@ -142,6 +142,7 @@ class Tuner:
     def _bootstrap_trial(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial) -> None:
         if trial.state in [optuna.trial.TrialState.PRUNED, optuna.trial.TrialState.FAIL]:
             return None
+        
         if trial.number == study.best_trial.number:
             print(f'Best trial found: {trial.number}')
             

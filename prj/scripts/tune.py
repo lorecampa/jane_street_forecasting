@@ -165,7 +165,7 @@ class MultiTuner(Tuner):
                 'early_stopping_rounds': 5,
             }
         else:
-            self.model_args = {'verbose': self.verbose, 'n_estimators': 10}
+            self.model_args = {'verbose': self.verbose}
             self.learn_args = {}
                         
 
