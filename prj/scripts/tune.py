@@ -4,7 +4,7 @@ import optuna
 from prj.agents.AgentNeuralRegressor import NEURAL_NAME_MODEL_CLASS_DICT
 from prj.agents.AgentTreeRegressor import TREE_NAME_MODEL_CLASS_DICT
 from prj.agents.factory import AgentsFactory
-from prj.config import DATA_DIR
+from prj.config import DATA_DIR, EXP_DIR
 from prj.data_loader import DataLoader
 from prj.tuner import Tuner
 from prj.utils import str_to_dict_arg
@@ -70,7 +70,17 @@ def get_cli_args():
     parser.add_argument(
         '--out_dir',
         type=str,
-        default="."
+        default=None
+    )
+    parser.add_argument(
+        '--storage',
+        type=str,
+        default=None
+    )
+    parser.add_argument(
+        '--study_name',
+        type=str,
+        default=None
     )
     parser.add_argument(
         '--verbose',
@@ -106,6 +116,7 @@ class MultiTuner(Tuner):
         out_dir: str = '.',
         n_seeds: int = None,
         storage: str = None,
+        study_name: str = None,
         n_trials: int = 50,
         verbose: int = 0,
         custom_model_args: dict = {},
@@ -121,6 +132,7 @@ class MultiTuner(Tuner):
             out_dir=out_dir,
             n_seeds=n_seeds,
             storage=storage,
+            study_name=study_name,
             n_trials=n_trials,
             verbose=verbose,
             custom_model_args=custom_model_args,
@@ -164,8 +176,8 @@ if __name__ == "__main__":
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    out_dir = f'{args.out_dir}_{timestamp}'
-    storage = f'sqlite:///{out_dir}/optuna_study.db'
+    out_dir = f'{args.out_dir}_{timestamp}' if args.out_dir is not None else str(EXP_DIR / 'tuning' / f'{args.model}_{timestamp}')
+    storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
 
     optimizer = MultiTuner(
         model_type=args.model,
@@ -178,6 +190,7 @@ if __name__ == "__main__":
         n_seeds=args.n_seeds,
         verbose=args.verbose,
         storage=storage,
+        study_name=args.study_name,
         n_trials=args.n_trials,
         custom_model_args=args.custom_model_args,
         custom_learn_args=args.custom_learn_args

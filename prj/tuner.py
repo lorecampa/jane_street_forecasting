@@ -7,7 +7,6 @@ from prj.agents.AgentRegressor import AgentRegressor
 from prj.config import DATA_DIR, GLOBAL_SEED
 from prj.hyperparameters_opt import SAMPLER
 
-
 class Tuner:
     def __init__(
         self,
@@ -18,8 +17,9 @@ class Tuner:
         end_val_partition: int,
         data_dir: str = DATA_DIR,
         out_dir: str = '.',
-        n_seeds: int = None,
         storage: str = None,
+        study_name: str = None,
+        n_seeds: int = None,
         n_trials: int = 50,
         verbose: int = 0,
         custom_model_args: dict = {},
@@ -35,12 +35,10 @@ class Tuner:
         assert self.start_val_partition <= self.end_val_partition, "start_val_partition must be less than end_val_partition"
         assert self.end_partition < self.start_val_partition or self.end_val_partition < self.start_partition, "No overlap between train and val partitions"
         
-        self.n_seeds = n_seeds
-        if self.n_seeds is not None:
+        if n_seeds is not None:
             np.random.seed()
-            self.seeds = [np.random.randint(2**32 - 1, dtype="int64").item() for i in range(self.n_seeds)]
+            self.seeds = sorted([np.random.randint(2**32 - 1, dtype="int64").item() for i in range(n_seeds)])
         else:
-            self.n_seeds = 1
             self.seeds = [GLOBAL_SEED]
         
         self.model: AgentRegressor = None
@@ -49,11 +47,10 @@ class Tuner:
         self.custom_learn_args = custom_learn_args
         self.learn_args = {}
         
-        
         # Optuna
         self.storage = storage
         self.n_trials = n_trials
-        
+        self.study_name = study_name
         self.out_dir = out_dir 
         
         self.verbose = verbose       
@@ -72,11 +69,27 @@ class Tuner:
         gc.collect()
         
     def create_study(self):
+        if self.study_name is None:
+            timestamp = self.out_dir.split('_')[-1]
+            self.study_name = f'{self.model_class.__name__}_{len(self.seeds)}seeds_{self.start_partition}_{self.end_partition}-{self.start_val_partition}_{self.end_val_partition}_{timestamp}'
+                 
         self.study = optuna.create_study(
-            study_name=f'{self.model_class.__name__}_{self.n_seeds}seeds_{self.start_partition}_{self.end_partition}-{self.start_val_partition}_{self.end_val_partition}',
+            study_name=self.study_name,
             direction="maximize", 
-            storage=self.storage
+            storage=self.storage,
+            load_if_exists=True
         )
+        
+        is_study_loaded = len(self.study.trials) >= 1
+        if is_study_loaded:
+            print(f"Study {self.study_name} loaded with {len(self.study.trials)} trials, loading seeds")
+            self.seeds = sorted([int(seed) for seed in self.study.get_user_attrs('seeds')])
+            # Updating model seeds
+            self.model.set_seeds(self.seeds)
+        else:
+            self.study.set_user_attr('seeds', self.seeds)
+            
+            
     def _setup_directories(self):
         self.optuna_dir = f'{self.out_dir}/optuna'
             
@@ -93,7 +106,7 @@ class Tuner:
             
             learn_args = self.learn_args.copy()
             learn_args.update(self.custom_learn_args)
-            
+                        
             self.train(model_args=model_args, learn_args=learn_args)
             
             train_metrics = self.model.evaluate(*self.train_data)

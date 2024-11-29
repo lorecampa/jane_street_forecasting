@@ -22,6 +22,10 @@ class AgentRegressor(AgentBase):
             self.n_seeds = n_seeds
             np.random.seed()
             self.seeds = sorted([np.random.randint(2**32 - 1, dtype="int64").item() for _ in range(self.n_seeds)])
+            
+    def set_seeds(self, seeds: list[int]) -> None:
+        self.seeds = seeds
+        self.n_seeds = len(seeds)
     
     @abstractmethod
     def load(self, path: str) -> None:
