@@ -188,7 +188,7 @@ def moving_z_score_norm(df: pl.DataFrame, rolling_stats_df: pl.DataFrame, cols: 
 def get_null_count(df: pl.DataFrame):
     n_rows = df.shape[0]
     return df.fill_nan(None).null_count().transpose(include_header=True).sort('column_0', descending=True).rename({'column_0': 'count'}).with_columns(
-        pl.col('count').truediv(n_rows).mul(100).alias('count (%)'),
+        pl.col('count').truediv(n_rows).mul(100).alias('count (%)')
     )
     
 

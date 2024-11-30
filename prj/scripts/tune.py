@@ -180,9 +180,6 @@ class MultiTuner(Tuner):
 
 if __name__ == "__main__":
     args = get_cli_args()
-    assert (args.study_name is not None and args.storage is not None) or \
-       (args.study_name is None and args.storage is None), \
-       "Both 'study_name' and 'storage' must be provided together or omitted together."
 
     data_dir = args.data_dir if args.data_dir is not None else DATA_DIR
     print(f'Tuning model: {args.model}')
@@ -193,6 +190,7 @@ if __name__ == "__main__":
         f'{args.model}_{args.n_seeds}seeds_{args.start_partition}_{args.end_partition}-{args.start_val_partition}_{args.end_val_partition}_{timestamp}'
         
     out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / study_name)
+    
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
 
     optimizer = MultiTuner(
