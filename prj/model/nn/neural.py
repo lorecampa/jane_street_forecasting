@@ -69,7 +69,7 @@ class TabularNNModel(ABC):
         sample_weight=None,
         validation_data: typing.Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None,
         early_stopping_rounds: int = 1,
-        batch_size: int = 256,
+        batch_size: int = 128,
         epochs: int = 1,
         optimizer: tfk.optimizers.Optimizer = None, 
         loss: tfk.losses.Loss = None, 

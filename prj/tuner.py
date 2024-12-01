@@ -22,6 +22,7 @@ class Tuner:
         n_seeds: int = None,
         n_trials: int = 50,
         verbose: int = 0,
+        use_gpu: bool = False,
         custom_model_args: dict = {},
         custom_learn_args: dict = {}
     ):
@@ -47,6 +48,9 @@ class Tuner:
         self.custom_learn_args = custom_learn_args
         self.learn_args = {}
         
+        self.use_gpu = use_gpu
+        self.sampler_args = {'use_gpu': use_gpu}
+        
         # Optuna
         self.storage = storage
         self.n_trials = n_trials
@@ -70,7 +74,7 @@ class Tuner:
         
     def train_best_trial(self):
         best_trial = self.study.best_trial
-        model_args: dict = SAMPLER[self.model_type](best_trial).copy()
+        model_args: dict = SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args).copy()
         model_args.update(self.model_args)
         model_args.update(self.custom_model_args)
         
@@ -111,7 +115,7 @@ class Tuner:
           
     def optimize_hyperparameters(self, metric: str = 'r2_w'):
         def objective(trial):
-            model_args: dict = SAMPLER[self.model_type](trial).copy()
+            model_args: dict = SAMPLER[self.model_type](trial, additional_args=self.sampler_args).copy()
             model_args.update(self.model_args)
             model_args.update(self.custom_model_args)
             

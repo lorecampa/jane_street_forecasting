@@ -36,7 +36,7 @@ class DataLoader:
         target_feature = 'responder_6'
         
         df = df.select(time_cols + ['symbol_id', 'weight'] + features + [target_feature])
-        X = df.select(features).cast(pl.Float32).collect().to_numpy()
+        X = df.select(features + ['symbol_id']).cast(pl.Float32).collect().to_numpy()
         y = df.select(target_feature).cast(pl.Float32).collect().to_series().to_numpy()
         w = df.select('weight').cast(pl.Float32).collect().to_series().to_numpy()
         

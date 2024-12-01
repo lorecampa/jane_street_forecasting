@@ -1,7 +1,6 @@
 from datetime import datetime
 import argparse
 import os
-import optuna
 from prj.agents.AgentNeuralRegressor import NEURAL_NAME_MODEL_CLASS_DICT
 from prj.agents.AgentTreeRegressor import TREE_NAME_MODEL_CLASS_DICT
 from prj.agents.factory import AgentsFactory
@@ -108,6 +107,12 @@ def get_cli_args():
         default=False,
         help="Run only training, no optimization"
     )
+    parser.add_argument(
+        '--gpu',
+        action='store_true',
+        default=False,
+        help="Run only training with gpu"
+    )
 
 
     return parser.parse_args()
@@ -125,6 +130,7 @@ class MultiTuner(Tuner):
         out_dir: str = '.',
         n_seeds: int = None,
         storage: str = None,
+        use_gpu: bool = False,
         study_name: str = None,
         n_trials: int = 50,
         verbose: int = 0,
@@ -142,6 +148,7 @@ class MultiTuner(Tuner):
             n_seeds=n_seeds,
             storage=storage,
             study_name=study_name,
+            use_gpu=use_gpu,
             n_trials=n_trials,
             verbose=verbose,
             custom_model_args=custom_model_args,
@@ -180,6 +187,8 @@ class MultiTuner(Tuner):
 
 if __name__ == "__main__":
     args = get_cli_args()
+    if not args.gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
     data_dir = args.data_dir if args.data_dir is not None else DATA_DIR
     print(f'Tuning model: {args.model}')
@@ -206,6 +215,7 @@ if __name__ == "__main__":
         storage=storage,
         study_name=study_name,
         n_trials=args.n_trials,
+        use_gpu=args.gpu,
         custom_model_args=args.custom_model_args,
         custom_learn_args=args.custom_learn_args
     )
