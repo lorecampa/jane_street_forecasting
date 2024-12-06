@@ -8,7 +8,6 @@
 
 We participated in the challenge as [...], a team of 3 MSc students from Politecnico di Milano:
 
-* **[Andrea Alari](https://github.com/andrea-alari)**
 * **[Lorenzo Campana](https://github.com/lorecampa)**
 * **[Carlo Sgaravatti](https://github.com/CarloSgaravatti)**
 
