@@ -64,7 +64,7 @@ class Tuner:
         
     
     def train(self, model_args:dict, learn_args: dict):
-        X, y, w = self.train_data
+        X, y, w, _ = self.train_data
         self.model.train(
             X, y, w,
             model_args=model_args,
@@ -74,17 +74,17 @@ class Tuner:
         
     def train_best_trial(self):
         best_trial = self.study.best_trial
-        model_args: dict = SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args).copy()
+        model_args = self.model_args.copy()
         model_args.update(self.model_args)
-        model_args.update(self.custom_model_args)
-        
+        model_args.update(SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args))
+                
         learn_args = self.learn_args.copy()
         learn_args.update(self.custom_learn_args)
         
         self.train(model_args=model_args, learn_args=learn_args) 
         
-        train_metrics = self.model.evaluate(*self.train_data)
-        val_metrics = self.model.evaluate(*self.val_data)  
+        train_metrics = self.model.evaluate(*self.train_data[:-1])
+        val_metrics = self.model.evaluate(*self.val_data[:-1])  
         return train_metrics, val_metrics
         
     def create_study(self):
@@ -123,11 +123,11 @@ class Tuner:
             learn_args.update(self.custom_learn_args)
                         
             self.train(model_args=model_args, learn_args=learn_args)
-            
-            train_metrics = self.model.evaluate(*self.train_data)
+                        
+            train_metrics = self.model.evaluate(*self.train_data[:-1])
             trial.set_user_attr("train_metrics", str(train_metrics))
 
-            val_metrics = self.model.evaluate(*self.val_data)
+            val_metrics = self.model.evaluate(*self.val_data[:-1])
             trial.set_user_attr("val_metrics", str(val_metrics))
             
             

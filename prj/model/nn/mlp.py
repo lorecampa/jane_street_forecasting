@@ -4,7 +4,7 @@ from prj.config import GLOBAL_SEED
 from prj.model.nn.neural import TabularNNModel
 
 
-class MLP(TabularNNModel):
+class Mlp(TabularNNModel):
     '''
     A simple Multi Layer Perceptron, with Dropout and Batch Normalization.
     '''

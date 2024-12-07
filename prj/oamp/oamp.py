@@ -20,8 +20,10 @@ class OAMP:
         self,
         agents_count: int,
         args: ConfigOAMP,
-        groups: typing.List[int],
     ):
+        assert args.agents_weights_upd_freq > 0, "Agents' weights update frequency should be greater than 0"
+        assert args.loss_fn_window > 0, "Loss function window should be greater than 0"
+        
         # Initializing agents
         self.agents_count = agents_count
         self.agents_losses = self.init_agents_losses(args.loss_fn_window)
@@ -35,9 +37,8 @@ class OAMP:
         self.p_tm1 = np.ones(agents_count) / agents_count
         self.cum_err = np.zeros(agents_count)
         
-        # Other parameters
-        self.groups = groups
-        self.curr_group_idx = 0
+        # Group params
+        self.group_t = 0
         
         # Initializing OAMP stats
         self.stats = {
@@ -50,23 +51,28 @@ class OAMP:
         loss_fn_window: int,
     ):
         return deque(maxlen=loss_fn_window)
+    
 
     def step(
         self,
         agents_losses: np.ndarray,
         agents_predictions: np.ndarray,
+        is_new_group: bool = False,
     ):
         # Updating agents' losses
         self.agents_losses.append(agents_losses)
+        
+        if self.t > 0 and is_new_group: # New group
+            self.group_t += 1
+        
         # Updating agents' weights
-        if self.t == 0 and self.curr_group_idx > 0 and self.curr_group_idx % self.agents_weights_upd_freq == 0:
+        if self.group_t > 0 and self.group_t == self.agents_weights_upd_freq:
+            # print(f'Updating agents weights at timestep {self.t} and group {self.group_t}, {self.groups[self.t]} {self.groups[self.t-1]}')
             self.update_agents_weights()
-
-        # Updating timestep
+            self.group_t = 0
+            
         self.t += 1
-        if self.t == self.groups[self.curr_group_idx]:
-            self.curr_group_idx += 1
-            self.t = 0
+        
         return self.compute_prediction(agents_predictions)
 
     def update_agents_weights(

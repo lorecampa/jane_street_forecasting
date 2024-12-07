@@ -12,15 +12,22 @@ from prj.agents.AgentRegressor import AgentRegressor
 import joblib
 import polars as pl
 from prj.config import DATA_DIR
-from prj.model.nn.mlp import MLP
+from prj.model.nn.cnn_resnet import CnnResnet
+from prj.model.nn.mlp import Mlp
 from prj.model.nn.neural import TabularNNModel
 from keras import optimizers as tfko
 from keras import metrics as tfkm
 from prj.model.nn.losses import WeightedZeroMeanR2Loss
+from prj.model.nn.rnn import Rnn
+from prj.model.nn.scheduler import get_simple_decay_scheduler
+from prj.model.nn.tcn import Tcn
 from prj.utils import set_random_seed 
 
 NEURAL_NAME_MODEL_CLASS_DICT = {
-    'mlp': MLP,
+    'mlp': Mlp,
+    'tcn': Tcn,
+    'rnn': Rnn,
+    'cnn_resnet': CnnResnet,
 }
 
 class AgentNeuralRegressor(AgentRegressor):
@@ -53,13 +60,23 @@ class AgentNeuralRegressor(AgentRegressor):
                 warnings.warn("Learning rate not provided. Using default value 1e-3")
             learning_rate = curr_model_args.pop('learning_rate')
             
+            use_scheduler = curr_model_args.pop('use_scheduler', False)
+            scheduling_rate = curr_model_args.pop('scheduling_rate', None)
+            if use_scheduler and scheduling_rate is None:
+                scheduling_rate = 0.005
+                warnings.warn(f"Scheduling rate not specified, using default {scheduling_rate}")
+            
             curr_agent: TabularNNModel = self.agent_class(**curr_model_args, random_seed=seed)
-            set_random_seed(seed) #TODO: set cuda determinism
+            set_random_seed(seed)
             
             optimizer = tfko.Adam(learning_rate=learning_rate)
             loss = WeightedZeroMeanR2Loss()
             metrics = [tfkm.R2Score(), tfkm.MeanSquaredError()]
             
+            
+            lr_scheduler = None
+            if use_scheduler:
+                lr_scheduler = get_simple_decay_scheduler(scheduling_rate)
             
             curr_agent.fit(
                 X, 
@@ -69,6 +86,7 @@ class AgentNeuralRegressor(AgentRegressor):
                 loss=loss,
                 optimizer=optimizer,
                 metrics=metrics,
+                lr_scheduler=lr_scheduler,
                 epochs=learn_args.get('epochs', 20),
                 early_stopping_rounds=learn_args.get('early_stopping_rounds', 5),
             )

@@ -154,12 +154,30 @@ class TabularNNModel(ABC):
         pred = self.model.predict(X, batch_size=batch_size, **kwargs)
         return pred.flatten() if pred.shape[1] == 1 else pred
         
-    def summary(self, expand_nested=True, **kwargs):
-        self.model.summary(expand_nested=expand_nested, **kwargs)
+    def summary(self, save_path:str=None, expand_nested=True, **kwargs):
+        if self.model is None:
+            warnings.warn('Model not compiled yet.')
+            return        
+        string_buffer = io.StringIO()
+        self.model.summary(print_fn=lambda x: string_buffer.write(x + "\n"), expand_nested=expand_nested, **kwargs)
+        summary_str = string_buffer.getvalue()
+        string_buffer.close()
+        
+        if save_path:
+            with open(save_path, 'w') as f:
+                f.write(summary_str)
+        else:            
+            self.model.summary(expand_nested=expand_nested, **kwargs)
     
-    def plot(self, dpi:int=50, expand_nested:bool=True, show_shapes:bool=True):
-        assert self.model is not None, 'Model not compiled yet'
-        return tfk.utils.plot_model(self.model, expand_nested=expand_nested, show_shapes=show_shapes, dpi=dpi)
+    def plot(self, dpi:int=50, expand_nested:bool=True, show_shapes:bool=True, save_path: str = None):
+        if self.model is None:
+            warnings.warn('Model not compiled yet.')
+            return
+        return tfk.utils.plot_model(self.model, expand_nested=expand_nested, show_shapes=show_shapes, dpi=dpi, to_file=save_path)
+    
+    def save_model_info(self, save_path: str):
+        self.summary(save_path=os.path.join(save_path, 'summary.txt'))
+        self.plot(save_path=os.path.join(save_path, 'model.png'))
 
     def save(self, path: str):
         os.makedirs(path, exist_ok=True)

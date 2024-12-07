@@ -14,8 +14,12 @@ class DataLoader:
         
         self.data_dir = data_dir
         self.ffill = kwargs.get('ffill', True)
-        
-        
+        self.include_symbol_id = kwargs.get('include_symbol_id', False)
+        self.features = [f'feature_{i:02d}' for i in range(79)]
+        if self.include_symbol_id:
+            self.features.append('symbol_id')
+        self.target = 'responder_6'
+        self.time_cols = ['date_id', 'time_id']
     
     def _get_partition_path(self, partition_id):
         path = self.data_dir / f'partition_id={partition_id}'
@@ -29,18 +33,14 @@ class DataLoader:
         df = pl.concat([
             pl.scan_parquet(self._get_partition_path(i))
             for i in range(start_partition, end_partition + 1)
-        ]).sort('date_id', 'time_id', 'symbol_id')
+        ]).sort(self.time_cols + ['symbol_id'])
         
-        features = [col for col in list(df.collect_schema().keys()) if col.startswith('feature_')]
-        time_cols = ['date_id', 'time_id']
-        target_feature = 'responder_6'
-        
-        df = df.select(time_cols + ['symbol_id', 'weight'] + features + [target_feature])
-        X = df.select(features + ['symbol_id']).cast(pl.Float32).collect().to_numpy()
-        y = df.select(target_feature).cast(pl.Float32).collect().to_series().to_numpy()
+        X = df.select(self.features).cast(pl.Float32).collect().to_numpy()
+        y = df.select(self.target).cast(pl.Float32).collect().to_series().to_numpy()
         w = df.select('weight').cast(pl.Float32).collect().to_series().to_numpy()
+        info = df.select(self.time_cols + ['symbol_id']).collect().to_numpy()
         
-        return X, y, w
+        return X, y, w, info
     
     
     

@@ -107,13 +107,15 @@ def sample_xgb_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
 def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     params = {
             'use_gaussian_noise': trial.suggest_categorical('use_gaussian_noise', [True, False]),
-            'numerical_transform': trial.suggest_categorical('numerical_transform', ['min-max', 'quantile-normal', 'yeo-johnson']),
-            'learning_rate': trial.suggest_float('learning_rate', 5e-5, 1e-1, log=True),
+            'learning_rate': trial.suggest_float('learning_rate', 5e-5, 1e-3, log=True),
+            'use_scheduler': trial.suggest_categorical('use_scheduler', [True, False]),
         }
     if params['use_gaussian_noise']:
         params['gaussian_noise_std'] = trial.suggest_float('gaussian_noise_std', 1e-3, 1)
-        
     
+    if params['use_scheduler']:
+        params['scheduling_rate'] = trial.suggest_float('scheduling_rate', 1e-3, 0.1)
+        
     return params
 
 def sample_mlp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
@@ -130,10 +132,56 @@ def sample_mlp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     return params
 
 
+
+def sample_cnn_resnet_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
+    params = _sample_base_neural_params(trial, additional_args)
+    params.update({
+        'conv_filters': trial.suggest_categorical('conv_filters', [16, 32]),
+        'kernel_size': trial.suggest_categorical('kernel_size', [2, 4, 8]),
+        'rnn_neurons': trial.suggest_int('rnn_neurons', 32, 64, step=16),
+        # Uncomment if needed:
+        # 'rnn_decay_factor': trial.suggest_categorical('rnn_decay_factor', [1, 1.5, 2, 2.5, 3]),
+        'kernel_initializer': trial.suggest_categorical('kernel_initializer', ['he_uniform', 'he_normal', 'glorot_uniform']),
+        'dropout': trial.suggest_float('dropout', 0.1, 0.5, log=True),
+        'layers': trial.suggest_int('layers', 4, 6),
+    })
+    return params
+
+def sample_tcn_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
+    params = _sample_base_neural_params(trial, additional_args)
+    params.update({
+        'conv_filters': trial.suggest_categorical('conv_filters', [16, 32, 64]),
+        'kernel_size': trial.suggest_categorical('kernel_size', [2, 4, 8, 16, 24, 32]),
+        'dropout': trial.suggest_float('dropout', 0.1, 0.5, log=True),
+        'layers': trial.suggest_int('layers', 4, 6),
+        'kernel_initializer': trial.suggest_categorical('kernel_initializer', ['he_uniform', 'he_normal', 'glorot_uniform']),
+    })
+    return params
+
+
+
+def sample_rnn_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
+    params = _sample_base_neural_params(trial, additional_args)
+    params.update({
+        'layers': trial.suggest_int('layers', 1, 4),
+        'use_lstm': trial.suggest_categorical('use_lstm', [False, True]),
+        'use_batch_norm': trial.suggest_categorical('use_batch_norm', [False, True]),
+        'start_neurons': trial.suggest_int('start_neurons', 32, 128, step=32),
+        'decay_factor': trial.suggest_categorical('decay_factor', [1, 1.5, 2, 2.5, 3]),
+    })
+    if params['use_batch_norm']:
+        params.update({
+            'momentum': trial.suggest_float('momentum', 0.1, 0.99, log=True),
+        })
+    return params
+
 SAMPLER = {
     "oamp": sample_oamp_params,
     "lgbm": sample_lgbm_params,
     "catboost": sample_catboost_params,
     "xgb": sample_xgb_params,
     "mlp": sample_mlp_params,
+    "cnn_resnet": sample_cnn_resnet_params,
+    "tcn": sample_tcn_params,
+    "rnn": sample_rnn_params
 }

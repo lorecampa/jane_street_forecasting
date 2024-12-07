@@ -176,7 +176,7 @@ class MultiTuner(Tuner):
         if self.is_neural:
             self.model_args = {'input_dim': self.train_data[0].shape[1:]}
             self.learn_args = {
-                'validation_data': self.val_data,
+                'validation_data': self.val_data[:-1],
                 'epochs': 20,
                 'early_stopping_rounds': 5,
             }
