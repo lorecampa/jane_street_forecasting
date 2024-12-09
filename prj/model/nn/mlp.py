@@ -38,7 +38,7 @@ class Mlp(TabularNNModel):
             l2_lambda (float): l2 regularization coefficient
             activation (str): the activation function of the hidden layers
         '''
-        super(MLP, self).__init__(
+        super(Mlp, self).__init__(
             input_dim=input_dim,
             output_dim=output_dim,
             use_gaussian_noise=use_gaussian_noise,

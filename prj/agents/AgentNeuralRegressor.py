@@ -17,6 +17,7 @@ from prj.model.nn.mlp import Mlp
 from prj.model.nn.neural import TabularNNModel
 from keras import optimizers as tfko
 from keras import metrics as tfkm
+from keras import callbacks as tfkc
 from prj.model.nn.losses import WeightedZeroMeanR2Loss
 from prj.model.nn.rnn import Rnn
 from prj.model.nn.scheduler import get_simple_decay_scheduler
@@ -56,18 +57,18 @@ class AgentNeuralRegressor(AgentRegressor):
             curr_model_args = model_args.copy()
             
             if 'learning_rate' not in curr_model_args:
-                curr_model_args['learning_rate'] = 1e-3
-                warnings.warn("Learning rate not provided. Using default value 1e-3")
+                curr_model_args['learning_rate'] = 5e-4
+                warnings.warn(f"Learning rate not provided. Using default value {curr_model_args['learning_rate']}")
             learning_rate = curr_model_args.pop('learning_rate')
             
             use_scheduler = curr_model_args.pop('use_scheduler', False)
             scheduling_rate = curr_model_args.pop('scheduling_rate', None)
-            if use_scheduler and scheduling_rate is None:
+            if use_scheduler and (scheduling_rate is None):
                 scheduling_rate = 0.005
                 warnings.warn(f"Scheduling rate not specified, using default {scheduling_rate}")
             
-            curr_agent: TabularNNModel = self.agent_class(**curr_model_args, random_seed=seed)
             set_random_seed(seed)
+            curr_agent: TabularNNModel = self.agent_class(**curr_model_args, random_seed=seed)
             
             optimizer = tfko.Adam(learning_rate=learning_rate)
             loss = WeightedZeroMeanR2Loss()
@@ -75,8 +76,18 @@ class AgentNeuralRegressor(AgentRegressor):
             
             
             lr_scheduler = None
+            scheduler_type = learn_args.get('scheduler_type', 'simple_decay')
             if use_scheduler:
-                lr_scheduler = get_simple_decay_scheduler(scheduling_rate)
+                if scheduler_type == 'simple_decay':
+                    lr_scheduler = get_simple_decay_scheduler(scheduling_rate, start_epoch=5)
+                elif scheduler_type == 'reduce_lr_on_plateau':
+                    lr_scheduler = tfkc.ReduceLROnPlateau(
+                        monitor='val_loss',
+                        patience=5,
+                        verbose=1
+                    )
+                else:
+                    raise ValueError(f"Scheduler type {scheduler_type} not recognized")
             
             curr_agent.fit(
                 X, 
@@ -87,8 +98,8 @@ class AgentNeuralRegressor(AgentRegressor):
                 optimizer=optimizer,
                 metrics=metrics,
                 lr_scheduler=lr_scheduler,
-                epochs=learn_args.get('epochs', 20),
-                early_stopping_rounds=learn_args.get('early_stopping_rounds', 5),
+                epochs=learn_args['epochs'],
+                early_stopping_rounds=learn_args['early_stopping_rounds'],
             )
                 
             self.agents.append(curr_agent)

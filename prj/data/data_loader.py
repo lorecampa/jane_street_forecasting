@@ -15,10 +15,12 @@ class DataLoader:
         self.data_dir = data_dir
         self.ffill = kwargs.get('ffill', True)
         self.include_symbol_id = kwargs.get('include_symbol_id', False)
+        self.target = kwargs.get('target', 'responder_6')
+        
+        
         self.features = [f'feature_{i:02d}' for i in range(79)]
         if self.include_symbol_id:
             self.features.append('symbol_id')
-        self.target = 'responder_6'
         self.time_cols = ['date_id', 'time_id']
     
     def _get_partition_path(self, partition_id):

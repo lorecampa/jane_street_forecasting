@@ -1,4 +1,6 @@
+from datetime import time
 import gc
+from logging import Logger
 import os
 import shutil
 import numpy as np
@@ -6,15 +8,13 @@ import optuna
 from prj.agents.AgentRegressor import AgentRegressor
 from prj.config import DATA_DIR, GLOBAL_SEED
 from prj.hyperparameters_opt import SAMPLER
+from prj.logger import get_default_logger
+from prj.utils import save_dict_to_json
 
 class Tuner:
     def __init__(
         self,
         model_type: str,
-        start_partition: int,
-        end_partition: int,
-        start_val_partition: int,
-        end_val_partition: int,
         data_dir: str = DATA_DIR,
         out_dir: str = '.',
         storage: str = None,
@@ -24,18 +24,17 @@ class Tuner:
         verbose: int = 0,
         use_gpu: bool = False,
         custom_model_args: dict = {},
-        custom_learn_args: dict = {}
+        custom_learn_args: dict = {},
+        logger: Logger = None
     ):
         self.model_type = model_type
         self.data_dir = data_dir
-        self.start_partition = start_partition
-        self.end_partition = end_partition
-        self.start_val_partition = start_val_partition
-        self.end_val_partition = end_val_partition
-        assert self.start_partition <= self.end_partition, "start_partition must be less than end_partition"
-        assert self.start_val_partition <= self.end_val_partition, "start_val_partition must be less than end_val_partition"
-        assert self.end_partition < self.start_val_partition or self.end_val_partition < self.start_partition, "No overlap between train and val partitions"
         
+        if logger is None:
+            self.logger = get_default_logger()
+        else:
+            self.logger = logger
+                
         if n_seeds is not None:
             np.random.seed()
             self.seeds = sorted([np.random.randint(2**32 - 1, dtype="int64").item() for i in range(n_seeds)])
@@ -62,33 +61,8 @@ class Tuner:
         
         self._setup_directories()
         
-    
-    def train(self, model_args:dict, learn_args: dict):
-        X, y, w, _ = self.train_data
-        self.model.train(
-            X, y, w,
-            model_args=model_args,
-            learn_args=learn_args
-        )
-        gc.collect()
         
-    def train_best_trial(self):
-        best_trial = self.study.best_trial
-        model_args = self.model_args.copy()
-        model_args.update(self.model_args)
-        model_args.update(SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args))
-                
-        learn_args = self.learn_args.copy()
-        learn_args.update(self.custom_learn_args)
-        
-        self.train(model_args=model_args, learn_args=learn_args) 
-        
-        train_metrics = self.model.evaluate(*self.train_data[:-1])
-        val_metrics = self.model.evaluate(*self.val_data[:-1])  
-        return train_metrics, val_metrics
-        
-    def create_study(self):
-                         
+    def create_study(self):          
         self.study = optuna.create_study(
             study_name=self.study_name,
             direction="maximize", 
@@ -98,7 +72,7 @@ class Tuner:
         
         is_study_loaded = len(self.study.trials) >= 1
         if is_study_loaded:
-            print(f"Study {self.study_name} loaded with {len(self.study.trials)} trials, loading seeds")
+            self.logger.info(f"Study {self.study_name} loaded with {len(self.study.trials)} trials, loading seeds")
             self.seeds = sorted([int(seed) for seed in self.study.user_attrs['seeds']])
             # Updating model seeds
             self.model.set_seeds(self.seeds)
@@ -115,17 +89,19 @@ class Tuner:
           
     def optimize_hyperparameters(self, metric: str = 'r2_w'):
         def objective(trial):
-            model_args: dict = SAMPLER[self.model_type](trial, additional_args=self.sampler_args).copy()
-            model_args.update(self.model_args)
+            start_time = time.time()
+            sampler_args = self.sampler_args.copy()
+            model_args = self.model_args.copy()
             model_args.update(self.custom_model_args)
+            model_args.update(SAMPLER[self.model_type](trial, additional_args=sampler_args))
             
             learn_args = self.learn_args.copy()
             learn_args.update(self.custom_learn_args)
                         
             self.train(model_args=model_args, learn_args=learn_args)
                         
-            train_metrics = self.model.evaluate(*self.train_data[:-1])
-            trial.set_user_attr("train_metrics", str(train_metrics))
+            # train_metrics = self.model.evaluate(*self.train_data[:-1])
+            # trial.set_user_attr("train_metrics", str(train_metrics))
 
             val_metrics = self.model.evaluate(*self.val_data[:-1])
             trial.set_user_attr("val_metrics", str(val_metrics))
@@ -134,10 +110,11 @@ class Tuner:
             if trial.number > 1:
                 self._plot_results(trial)
             
+            self.logger.info(f"Trial {trial.number} finished in {(time.time() - start_time)/60:.2f} minutes")
             return val_metrics[metric]
         
-        print(f"Optimizing {self.model_class.__name__} hyperparameters")
-        print(f'Using seeds: {self.seeds}')
+        self.logger.info(f"Optimizing {self.model_class.__name__} hyperparameters")
+        self.logger.info(f'Using seeds: {self.seeds}')
         self.study.optimize(objective, n_trials=self.n_trials, callbacks=[self._bootstrap_trial])
     
     def _plot_results(self, trial):
@@ -159,11 +136,24 @@ class Tuner:
             return None
         
         if trial.number == study.best_trial.number:
-            print(f'Best trial found: {trial.number}')
+            self.logger.info(f'Best trial found: {trial.number}')
             
             best_dir_path = f'{self.out_dir}/best_trial'
             if os.path.exists(best_dir_path):
                 shutil.rmtree(best_dir_path)
+                
+            os.makedirs(best_dir_path, exist_ok=True)
+            best_params = SAMPLER[self.model_type](trial, additional_args=self.sampler_args)
+            params = dict(
+                model_args=self.model_args,
+                custom_model_args=self.custom_model_args,
+                learn_args=self.learn_args,
+                custom_learn_args=self.custom_learn_args,
+                sampler_args=self.sampler_args,
+                seeds=self.seeds,
+                best_params=best_params
+            )
+            save_dict_to_json(params, f'{best_dir_path}/params.json')
             
             best_dir_saved_model_path = f'{best_dir_path}/saved_model'
             os.makedirs(best_dir_saved_model_path, exist_ok=True)

@@ -33,7 +33,11 @@ def sample_lgbm_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
         params['gpu_use_dp'] = False
         
     else:
-        params["max_bin"] = trial.suggest_int("max_bin", 8, 512, log=True)
+        max_bin = additional_args.get('max_bin', None)
+        if max_bin is not None:
+            params['max_bin'] = max_bin
+        else:
+            params['max_bin'] = trial.suggest_int('max_bin', 8, 512, log=True)
     
     return params
 

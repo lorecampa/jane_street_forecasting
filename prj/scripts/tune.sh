@@ -1,7 +1,7 @@
 # mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet
 
 # Neural
-START_PARTITION=7
+START_PARTITION=4
 END_PARTITION=8
 START_VAL_PARTITION=9
 END_VAL_PARTITION=9
@@ -57,3 +57,15 @@ python prj/scripts/tune.py \
     --verbose -1 \
     --storage  sqlite:///experiments/tuning/lgbm_20241128_140415/optuna_study.db \
     --study_name LGBMRegressor_1seeds_7_8-9_9
+
+
+
+
+
+# Tree LGBM Binary
+python prj/scripts/tune_lgbm_binary.py \
+    --model lgbm \
+    --n_trials 200 \
+    --n_seeds 1 \
+    --verbose -1 \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet

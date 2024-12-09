@@ -12,6 +12,7 @@ import joblib
 import polars as pl
 from prj.config import DATA_DIR
 from prj.utils import set_random_seed
+import lightgbm as lgb
 
 TREE_NAME_MODEL_CLASS_DICT = {
     'lgbm': LGBMRegressor,
@@ -33,30 +34,51 @@ class AgentTreeRegressor(AgentRegressor):
         self.agents: list[typing.Union[LGBMRegressor, CatBoostRegressor, XGBRegressor]] = []
         
     
-    
     def train(self, 
               X: np.ndarray, 
               y: np.ndarray, 
               sample_weight: np.ndarray, 
               model_args: dict = {}, 
-              learn_args: dict = {}
+              learn_args: dict = {},
     ):
         self.agents = []
         for seed in tqdm(self.seeds):
             set_random_seed(seed)
             callbacks = []
+            curr_model_args = model_args.copy()
+            curr_learn_args = learn_args.copy()
             if self.agent_type == 'lgbm':
                 callbacks = [log_evaluation(period=20)]
-                curr_agent = self.agent_class(**model_args, random_state=seed)    
-                curr_agent.fit(X, y, callbacks=callbacks, sample_weight=sample_weight, **learn_args)
+                curr_agent = self.agent_class(**curr_model_args, random_state=seed)
+                curr_agent.fit(X, y, callbacks=callbacks, sample_weight=sample_weight, **curr_learn_args)
             elif self.agent_type == 'xgb':
-                curr_agent = self.agent_class(**model_args, random_state=seed)    
+                curr_agent = self.agent_class(**model_args, random_state=seed)   
                 curr_agent.fit(X, y, sample_weight=sample_weight, **learn_args)
             elif self.agent_type == 'catboost':
-                curr_agent = self.agent_class(**model_args, random_state=seed)    
+                curr_agent = self.agent_class(**model_args, random_state=seed)
                 curr_agent.fit(X, y, sample_weight=sample_weight, **learn_args)
                 
             self.agents.append(curr_agent)
+            
+        return self.agents
+    
+    def train_native(self, train_ds: typing.Union[lgb.Dataset], model_args: dict = {}, learn_args: dict = {}):
+        self.agents = []
+        for seed in tqdm(self.seeds):
+            set_random_seed(seed)
+            callbacks = []
+            params = model_args.copy()
+            if self.agent_type == 'lgbm':
+                callbacks = [log_evaluation(period=20)]
+                num_boost_rounds = params.pop('n_estimators')
+                params.update(learn_args)
+                booster = lgb.train(params=params, num_boost_round=num_boost_rounds, train_set=train_ds, callbacks=callbacks)
+            elif self.agent_type == 'xgb':
+                raise NotImplementedError("XGBoost does not support training with Dataset")
+            elif self.agent_type == 'catboost':
+                raise NotImplementedError("CatBoost does not support training with Dataset")
+
+            self.agents.append(booster)
             
         return self.agents
     

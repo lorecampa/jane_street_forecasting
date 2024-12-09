@@ -8,3 +8,6 @@ class WeightedZeroMeanR2Loss(tf.keras.losses.Loss):
         if sample_weight is None:
             sample_weight = tf.ones_like(y_true)            
         return tf.reduce_sum(sample_weight * tf.square(y_true - y_pred)) / tf.maximum(tf.reduce_sum(sample_weight * tf.square(y_true)), 1e-7)
+    
+    def get_config(self):
+        return super().get_config()
