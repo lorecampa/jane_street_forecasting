@@ -56,7 +56,6 @@ class OAMP:
     def step(
         self,
         agents_losses: np.ndarray,
-        agents_predictions: np.ndarray,
         is_new_group: bool = False,
     ):
         # Updating agents' losses
@@ -73,8 +72,6 @@ class OAMP:
             
         self.t += 1
         
-        return self.compute_prediction(agents_predictions)
-
     def update_agents_weights(
         self,
     ):

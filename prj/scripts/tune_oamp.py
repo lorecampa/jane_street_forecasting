@@ -133,11 +133,11 @@ class TunerOamp(Tuner):
         self.loader = DataLoader(data_dir=self.data_dir, data_args=data_args)
         X, self.y, self.w, info = self.loader.load_partitions(self.start_partition, self.end_partition)
         
-        f = 100000
-        X = X[:f]
-        self.y = self.y[:f]
-        self.w = self.w[:f]
-        info = info[:f]
+        # f = 100000
+        # X = X[:f]
+        # self.y = self.y[:f]
+        # self.w = self.w[:f]
+        # info = info[:f]
         
         self.dates = info[:, 0]
         self.times = info[:, 1]
@@ -172,11 +172,18 @@ class TunerOamp(Tuner):
         self.model = OAMP(agents_count=len(self.agents), args=config)
         
         preds = []
+        last_day = 0
         for i in tqdm(range(self.agent_predictions.shape[0])):
-            is_new_group = self.times[i] != self.times[i-1] if i > 0 else False
-            pred = self.model.step(agent_losses[i], self.agent_predictions[i], is_new_group=is_new_group)
-            preds.append(pred)
-        
+            is_new_day = i > 0 and self.dates[i] != self.dates[i-1]
+            if is_new_day:
+                # print(f'New day {self.dates[i]}, doing steps of previous day')
+                for j in range(last_day, i):
+                    is_new_group = j > last_day and self.times[j] != self.times[j-1]
+                    self.model.step(agent_losses[j], is_new_group=is_new_group)
+                last_day = i
+                
+            preds.append(self.model.compute_prediction(self.agent_predictions[i]))
+                    
         return np.array(preds)
                 
     
