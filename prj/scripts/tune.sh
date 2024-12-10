@@ -38,9 +38,12 @@ python prj/scripts/tune.py \
 # Tree LGBM Binary
 python prj/scripts/tune_lgbm_binary.py \
     --model lgbm \
-    --n_trials 200 \
+    --n_trials 5 \
     --n_seeds 1 \
-    --verbose -1 \
+    --verbose -1
+    
+    
+     \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet
 
 

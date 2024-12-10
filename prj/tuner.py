@@ -28,7 +28,7 @@ class Tuner:
     ):
         self.model_type = model_type
         self.data_dir = data_dir
-        
+        self.loader = None
         if logger is None:
             self.logger = get_default_logger()
         else:
@@ -77,8 +77,19 @@ class Tuner:
             self.model.set_seeds(self.seeds)
         else:
             self.study.set_user_attr('seeds', self.seeds)
-            
-            
+    
+
+    def train_best_trial(self):
+        best_trial = self.study.best_trial
+        model_args = self.model_args.copy()
+        model_args.update(self.custom_model_args)
+        model_args.update(SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args))
+                
+        learn_args = self.learn_args.copy()
+        learn_args.update(self.custom_learn_args)
+        
+        self.train(model_args=model_args, learn_args=learn_args) 
+        
     def _setup_directories(self):
         self.optuna_dir = f'{self.out_dir}/optuna'
             
@@ -87,7 +98,7 @@ class Tuner:
 
           
     def optimize_hyperparameters(self, metric: str = 'r2_w'):
-        def objective(trial):
+        def objective(trial: optuna.Trial):
             start_time = time.time()
             sampler_args = self.sampler_args.copy()
             model_args = self.model_args.copy()
@@ -99,14 +110,10 @@ class Tuner:
                         
             self.train(model_args=model_args, learn_args=learn_args)
                         
-            # train_metrics = self.model.evaluate(*self.train_data[:-1])
-            # trial.set_user_attr("train_metrics", str(train_metrics))
-
             val_metrics = self.model.evaluate(*self.val_data[:-1])
             trial.set_user_attr("val_metrics", str(val_metrics))
             
-            
-            if trial.number % 5 == 0:
+            if trial.number % 5 == 0 or trial.number == self.n_trials:
                 self._plot_optuna_results(trial)
             
             self.logger.info(f"Trial {trial.number} finished in {(time.time() - start_time)/60:.2f} minutes")
@@ -160,7 +167,7 @@ class Tuner:
                 seeds=self.seeds,
                 best_params=best_params
             )
-            if self.loader:
+            if self.loader is not None:
                 params.update(**self.loader.get_info())
             
             save_dict_to_pickle(params, f'{best_dir_path}/params.pkl')

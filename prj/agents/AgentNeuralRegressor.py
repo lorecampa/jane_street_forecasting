@@ -18,6 +18,7 @@ from prj.model.nn.neural import TabularNNModel
 from keras import optimizers as tfko
 from keras import metrics as tfkm
 from keras import callbacks as tfkc
+import keras as tfk
 from prj.model.nn.losses import WeightedZeroMeanR2Loss
 from prj.model.nn.rnn import Rnn
 from prj.model.nn.scheduler import get_simple_decay_scheduler
@@ -71,7 +72,8 @@ class AgentNeuralRegressor(AgentRegressor):
             curr_agent: TabularNNModel = self.agent_class(**curr_model_args, random_seed=seed)
             
             optimizer = tfko.Adam(learning_rate=learning_rate)
-            loss = WeightedZeroMeanR2Loss()
+            # loss = WeightedZeroMeanR2Loss()
+            loss = tfk.losses.MeanSquaredError()
             metrics = [tfkm.R2Score(), tfkm.MeanSquaredError()]
             
             

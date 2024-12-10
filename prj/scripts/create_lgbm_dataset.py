@@ -14,7 +14,7 @@ def main(output_dir, num_bins, logger: logging.Logger):
     data_args = DATA_ARGS_CONFIG['lgbm']
     loader = DataLoader(data_dir=DATA_DIR, **data_args)
     
-    X, y, w, _ = loader.load_partitions(0, 8)
+    X, y, w, _ = loader.load_partitions(5, 5)
     features = loader.features
     categorical_features = []
     
@@ -29,7 +29,7 @@ def main(output_dir, num_bins, logger: logging.Logger):
         weight=w,
         feature_name=features,
         categorical_feature=categorical_features,
-        params={'max_bin': num_bins},
+        params={'max_bin': num_bins, 'feature_pre_filter': False},
     )
     lgbm_dataset.construct()
 

@@ -66,6 +66,12 @@ def get_cli_args():
         default=0
     )
     parser.add_argument(
+        '--train',
+        action='store_true',
+        default=False,
+        help="Run only training, no optimization"
+    )
+    parser.add_argument(
         '--custom_model_args',
         type=str_to_dict_arg,
         default='{}',
@@ -134,30 +140,22 @@ class TunerLGBMBinary(Tuner):
         data_args = DATA_ARGS_CONFIG[self.model_type]
         self.model_args = {'verbose': self.verbose}
         self.learn_args = {}
-        self.sampler_args = {'max_bin': 128}
+        self.sampler_args = {'max_bin': 128, 'use_gpu': self.use_gpu}
         
-        binary_path_train = '/home/lorecampa/projects/jane_street_forecasting/dataset/lgbm/binary/feature_base/0_8/lgbm_dataset.bin'
+        binary_path_train = str(DATA_DIR.parent / f'lgbm/max_bin_{self.sampler_args['max_bin']}/0_8/lgbm_dataset.bin')
         self.start_val_partition, self.end_val_partition = 9, 9
 
-        if binary_path_train is not None:
-            self.train_data = lgb.Dataset(data=binary_path_train)
-            # self.train_data.construct()
-            self.data_loader = DataLoader(data_dir=self.data_dir, **data_args)
-            self.val_data = self.data_loader.load_partitions(self.start_val_partition, self.end_val_partition)
-        else:     
-            self.data_loader = DataLoader(data_dir=self.data_dir, **data_args)
-            self.train_data = self.data_loader.load_partitions(self.start_partition, self.end_partition)   
-            self.val_data = self.data_loader.load_partitions(self.start_val_partition, self.end_val_partition)
-            
-        
+        self.train_data = lgb.Dataset(data=binary_path_train)
+        self.loader = DataLoader(data_dir=self.data_dir, **data_args)
+        self.val_data = self.loader.load_partitions(self.start_val_partition, self.end_val_partition)
+   
     def train(self, model_args:dict, learn_args: dict):
         self.model.train_native(
             self.train_data,
             model_args=model_args,
             learn_args=learn_args,
         )
-        gc.collect()
-                        
+                                
 
 if __name__ == "__main__":
     args = get_cli_args()
@@ -171,7 +169,7 @@ if __name__ == "__main__":
     study_name = args.study_name if args.study_name is not None else \
         f'{args.model}_{args.n_seeds}seeds_max_bin_128_0_8-9_9_{timestamp}'
         
-    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / study_name)
+    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / 'lgbm_binary' / study_name)
     
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
     logger = setup_logger(out_dir)
@@ -190,6 +188,12 @@ if __name__ == "__main__":
         custom_learn_args=args.custom_learn_args,
         logger=logger
     )
-    optimizer.create_study()
-    optimizer.run()
+    optimizer.create_study()    
+    if args.train:
+        optimizer.train_best_trial()
+        save_path = f'{out_dir}/train/model'
+        os.makedirs(save_path, exist_ok=True)
+        optimizer.model.save(save_path)
+    else:
+        optimizer.run()
     

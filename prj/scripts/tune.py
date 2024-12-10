@@ -203,24 +203,8 @@ class MultiTuner(Tuner):
             model_args=model_args,
             learn_args=learn_args,
         )
-        gc.collect()
-        
-    def train_best_trial(self):
-        best_trial = self.study.best_trial
-        model_args = self.model_args.copy()
-        model_args.update(self.custom_model_args)
-        model_args.update(SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args))
-                
-        learn_args = self.learn_args.copy()
-        learn_args.update(self.custom_learn_args)
-        
-        self.train(model_args=model_args, learn_args=learn_args) 
-        
-        train_metrics = self.model.evaluate(*self.train_data[:-1])
-        val_metrics = self.model.evaluate(*self.val_data[:-1])  
-        return train_metrics, val_metrics
-                        
 
+                        
 if __name__ == "__main__":
     args = get_cli_args()
     if not args.gpu:
@@ -259,9 +243,7 @@ if __name__ == "__main__":
     optimizer.create_study()
 
     if args.train:
-        train_res, val_res = optimizer.train_best_trial()
-        logger.info(f"Train: {train_res}, Val: {val_res}")
-        
+        optimizer.train_best_trial()
         save_path = f'{out_dir}/train/model'
         os.makedirs(save_path, exist_ok=True)
         optimizer.model.save(save_path)
