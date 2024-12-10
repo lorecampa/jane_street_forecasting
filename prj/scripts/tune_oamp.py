@@ -133,11 +133,11 @@ class TunerOamp(Tuner):
         self.loader = DataLoader(data_dir=self.data_dir, data_args=data_args)
         X, self.y, self.w, info = self.loader.load_partitions(self.start_partition, self.end_partition)
         
-        # f = 100000
-        # X = X[:f]
-        # self.y = self.y[:f]
-        # self.w = self.w[:f]
-        # info = info[:f]
+        f = 100000
+        X = X[:f]
+        self.y = self.y[:f]
+        self.w = self.w[:f]
+        info = info[:f]
         
         self.dates = info[:, 0]
         self.times = info[:, 1]
@@ -165,7 +165,9 @@ class TunerOamp(Tuner):
         if loss_fn not in self.losses_dict:
             raise ValueError(f"Loss function {loss_fn} not found in agent losses")
 
-        agent_losses = self.losses_dict[loss_fn](y_true=self.y, y_pred=self.agent_predictions, w=self.w)     
+        agent_losses = self.losses_dict[loss_fn](y_true=self.y, y_pred=self.agent_predictions, w=self.w)  
+        print(agent_losses.shape)
+           
         config = ConfigOAMP(model_args)
         self.model = OAMP(agents_count=len(self.agents), args=config)
         

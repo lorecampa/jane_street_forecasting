@@ -27,6 +27,7 @@ class OAMP:
         self.agents_count = agents_count
         self.agents_losses = self.init_agents_losses(args.loss_fn_window)
         self.agents_weights_upd_freq = args.agents_weights_upd_freq # Right now it is measured in groups
+        self.agg_type = args.agg_type
         
         # Initializing OAMP
         self.t = 0
@@ -137,10 +138,23 @@ class OAMP:
 
     def compute_prediction(
         self,
-        agents_predictions: np.ndarray,
+        agent_predictions: np.ndarray,
     ) -> np.ndarray:
-        return np.sum(agents_predictions * self.p_tm1) / np.sum(self.p_tm1)
-
+        if self.agg_type == "max":
+            return agent_predictions[np.argmax(self.p_tm1)]
+        elif self.agg_type == "mean":
+            return np.sum(agent_predictions * self.p_tm1) / np.sum(self.p_tm1) 
+        elif self.agg_type == "median":
+            sorted_indices = np.argsort(agent_predictions)
+            sorted_agent_predictions = agent_predictions[sorted_indices]
+            sorted_weights = self.p_tm1[sorted_indices]
+            cumulative_weights = np.cumsum(sorted_weights)
+            total_weight = np.sum(self.p_tm1)
+            return sorted_agent_predictions[np.searchsorted(cumulative_weights, total_weight / 2)]
+        else:
+            raise ValueError(f"Unknown aggregation type: {self.agg_type}")
+            
+        
     def plot_stats(
         self,
         save_path: typing.Optional[str] = None,
