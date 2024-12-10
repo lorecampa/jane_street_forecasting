@@ -3,8 +3,9 @@ from lightgbm import LGBMRegressor
 
 def sample_oamp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     params = {
-        "agents_weights_upd_freq": trial.suggest_int("agents_weights_upd_freq", 1, 10),
-        "loss_fn_window": trial.suggest_int("loss_fn_window", 1, 10),
+        "agents_weights_upd_freq": trial.suggest_int("agents_weights_upd_freq", 1, 10000, step=10),
+        "loss_fn_window": trial.suggest_int("loss_fn_window", 1000, 30000, step=1000),
+        "loss_function": trial.suggest_categorical("loss_function", ["mse", "mae", "log_cosh"]),
     }
     return params
     
@@ -44,7 +45,7 @@ def sample_lgbm_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
 def sample_catboost_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     use_gpu = additional_args.get("use_gpu", False)
     params = {
-            'iterations': trial.suggest_int('iterations', 100, 5000, step=10),
+            'iterations': trial.suggest_int('iterations', 100, 1000, step=50),
             'learning_rate': trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),
             'reg_lambda': trial.suggest_float("reg_lambda", 1e-5, 1e5, log=True),
             'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise', 'Lossguide']),

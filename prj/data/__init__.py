@@ -20,7 +20,11 @@ for k in TREE_NAME_MODEL_CLASS_DICT.keys():
 
 for k in NEURAL_NAME_MODEL_CLASS_DICT.keys():
     DATA_ARGS_CONFIG[k] = _NEURAL_BASE_CONFIG
-    
+
+DATA_ARGS_CONFIG['oamp'] = {
+    'ffill': False,
+    'include_symbol_id': False,
+}
 
 # DATA_ARGS_CONFIG.update({
     

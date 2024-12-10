@@ -48,17 +48,6 @@ def return_over_max_drawdown(returns_pct):
 
 
 def weighted_r2(y_true, y_pred, weights=None):
-    """
-    Compute the sample weighted zero-mean R-squared score (R²).
-
-    Parameters:
-    - y_true: numpy array, ground-truth values
-    - y_pred: numpy array, predicted values
-    - weights: numpy array, sample weights
-
-    Returns:
-    - r2: float, weighted R² score
-    """
     if weights is None:
         weights = np.ones_like(y_true)
     return 1 - (np.sum(weights * (y_true - y_pred) ** 2) / np.sum(weights * (y_true ** 2)))
@@ -78,3 +67,13 @@ def weighted_rmse(y_true, y_pred, weights):
         weights = np.ones_like(y_true)
     mse = np.sum(weights * (y_true - y_pred) ** 2) / np.sum(weights)
     return np.sqrt(mse)
+
+
+def squared_weighted_error_loss_fn(y_true: np.ndarray, y_pred: np.ndarray, w: np.ndarray) -> np.ndarray:
+    return w.reshape(-1, 1) * ((y_true.reshape(-1, 1) - y_pred) ** 2)
+
+def absolute_weighted_error_loss_fn(y_true: np.ndarray, y_pred: np.ndarray, w: np.ndarray) -> np.ndarray:
+    return w.reshape(-1, 1) * np.abs(y_true.reshape(-1, 1) - y_pred)
+
+def log_cosh_weighted_loss_fn(y_true: np.ndarray, y_pred: np.ndarray, w: np.ndarray) -> np.ndarray:    
+    return w.reshape(-1, 1) * np.log(np.cosh(y_true.reshape(-1, 1) - y_pred))

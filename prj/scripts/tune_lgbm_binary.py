@@ -107,7 +107,6 @@ class TunerLGBMBinary(Tuner):
         study_name: str = None,
         n_trials: int = 50,
         verbose: int = 0,
-        early_stopping: bool = True,
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
         logger: Logger = None,
@@ -128,7 +127,6 @@ class TunerLGBMBinary(Tuner):
         )
                 
         model_dict = TREE_NAME_MODEL_CLASS_DICT | NEURAL_NAME_MODEL_CLASS_DICT
-        self.early_stopping = early_stopping
         
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
@@ -142,8 +140,8 @@ class TunerLGBMBinary(Tuner):
         self.start_val_partition, self.end_val_partition = 9, 9
 
         if binary_path_train is not None:
-            self.train_data = lgb.Dataset(data=binary_path_train, params={'max_bin': 128})
-            self.train_data.construct()
+            self.train_data = lgb.Dataset(data=binary_path_train)
+            # self.train_data.construct()
             self.data_loader = DataLoader(data_dir=self.data_dir, **data_args)
             self.val_data = self.data_loader.load_partitions(self.start_val_partition, self.end_val_partition)
         else:     

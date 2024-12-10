@@ -57,3 +57,6 @@ class AgentRegressor(AgentBase):
             'mse_w': weighted_mse(y, y_pred, weights=weights),
             'rmse_w': weighted_rmse(y, y_pred, weights=weights),
         }
+        
+    def plot_stats(self, save_path: typing.Optional[str] = None) -> None:
+        pass

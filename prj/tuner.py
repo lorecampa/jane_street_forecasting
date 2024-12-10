@@ -1,5 +1,4 @@
-from datetime import time
-import gc
+import time
 from logging import Logger
 import os
 import shutil
@@ -9,7 +8,7 @@ from prj.agents.AgentRegressor import AgentRegressor
 from prj.config import DATA_DIR, GLOBAL_SEED
 from prj.hyperparameters_opt import SAMPLER
 from prj.logger import get_default_logger
-from prj.utils import save_dict_to_json
+from prj.utils import save_dict_to_json, save_dict_to_pickle
 
 class Tuner:
     def __init__(
@@ -107,8 +106,8 @@ class Tuner:
             trial.set_user_attr("val_metrics", str(val_metrics))
             
             
-            if trial.number > 1:
-                self._plot_results(trial)
+            if trial.number % 5 == 0:
+                self._plot_optuna_results(trial)
             
             self.logger.info(f"Trial {trial.number} finished in {(time.time() - start_time)/60:.2f} minutes")
             return val_metrics[metric]
@@ -117,20 +116,22 @@ class Tuner:
         self.logger.info(f'Using seeds: {self.seeds}')
         self.study.optimize(objective, n_trials=self.n_trials, callbacks=[self._bootstrap_trial])
     
-    def _plot_results(self, trial):
+    def _plot_optuna_results(self, trial):
         plots = [
-            ("ParamsOptHistory.png", optuna.visualization.plot_optimization_history(self.study)),
-            ("ParamsImportance.png", optuna.visualization.plot_param_importances(self.study)),
-            ("ParamsContour.png", optuna.visualization.plot_contour(self.study)),
-            ("ParamsSlice.png", optuna.visualization.plot_slice(self.study))
+            ("ParamsOptHistory.png", optuna.visualization.plot_optimization_history),
+            ("ParamsImportance.png", optuna.visualization.plot_param_importances),
+            ("ParamsContour.png", optuna.visualization.plot_contour),
+            ("ParamsSlice.png", optuna.visualization.plot_slice)
         ]
         optuna_plot_dir = f"{self.optuna_dir}/plots"
         os.makedirs(optuna_plot_dir, exist_ok=True)
-        for filename, fig in plots:
-            fig.write_image(f"{optuna_plot_dir}/{filename}")
-            
-            
-    
+        for filename, fn in plots:
+            try:
+                fig = fn(self.study)
+                fig.write_image(f"{optuna_plot_dir}/{filename}")
+            except Exception as e:
+                self.logger.error(f"Error while plotting {filename}: {e}")
+                
     def _bootstrap_trial(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial) -> None:
         if trial.state in [optuna.trial.TrialState.PRUNED, optuna.trial.TrialState.FAIL]:
             return None
@@ -141,6 +142,10 @@ class Tuner:
             best_dir_path = f'{self.out_dir}/best_trial'
             if os.path.exists(best_dir_path):
                 shutil.rmtree(best_dir_path)
+                
+            best_dir_saved_model_path = f'{best_dir_path}/saved_model'
+            os.makedirs(best_dir_saved_model_path, exist_ok=True)
+            self.model.save(best_dir_saved_model_path)
                 
             os.makedirs(best_dir_path, exist_ok=True)
             best_params = SAMPLER[self.model_type](trial, additional_args=self.sampler_args)
@@ -153,11 +158,15 @@ class Tuner:
                 seeds=self.seeds,
                 best_params=best_params
             )
-            save_dict_to_json(params, f'{best_dir_path}/params.json')
+            if self.loader:
+                params.update(**self.loader.get_info())
+                
+            save_dict_to_pickle(params, f'{best_dir_path}/params.pkl')
             
-            best_dir_saved_model_path = f'{best_dir_path}/saved_model'
-            os.makedirs(best_dir_saved_model_path, exist_ok=True)
-            self.model.save(best_dir_saved_model_path)
+            plot_dir = f'{best_dir_path}/plots'
+            os.makedirs(plot_dir, exist_ok=True)
+            self.model.plot_stats(save_path=plot_dir)
+            
     
     def run(self):
         self.optimize_hyperparameters()

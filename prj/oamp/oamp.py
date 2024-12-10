@@ -3,9 +3,8 @@ import os
 import typing
 import matplotlib.pyplot as plt
 import numpy as np
-
+import joblib
 from collections import deque
-
 from prj.oamp.oamp_config import ConfigOAMP
 from prj.oamp.oamp_utils import (
     get_m,
@@ -127,6 +126,14 @@ class OAMP:
             )
             
         return agents_losses
+
+    def save(self, path: str):
+        os.makedirs(path, exist_ok=True)
+        joblib.dump(self, os.path.join(path, 'class.joblib'))
+    
+    @staticmethod
+    def load(path: str) -> 'OAMP':
+        return joblib.load(os.path.join(path, 'class.joblib'))
 
     def compute_prediction(
         self,

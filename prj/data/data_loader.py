@@ -11,7 +11,7 @@ class DataLoader:
     ):
         if isinstance(data_dir, str):
             data_dir = Path(data_dir)
-        
+        self.kwargs = kwargs.copy()
         self.data_dir = data_dir
         self.ffill = kwargs.get('ffill', True)
         self.include_symbol_id = kwargs.get('include_symbol_id', False)
@@ -43,6 +43,13 @@ class DataLoader:
         info = df.select(self.time_cols + ['symbol_id']).collect().to_numpy()
         
         return X, y, w, info
+    
+    def get_info(self) -> None:
+        return {
+            **self.kwargs,
+            'features': self.features,
+            'time_cols': self.time_cols,
+        }
     
     
     

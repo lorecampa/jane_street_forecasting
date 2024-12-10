@@ -171,8 +171,8 @@ class MultiTuner(Tuner):
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
         data_args = DATA_ARGS_CONFIG[self.model_type]
-        self.data_loader = DataLoader(data_dir=self.data_dir, **data_args)
-        self.train_data = self.data_loader.load_partitions(self.start_partition, self.end_partition)
+        self.loader = DataLoader(data_dir=self.data_dir, **data_args)
+        self.train_data = self.loader.load_partitions(self.start_partition, self.end_partition)
         self.es_data = None
         if self.is_neural and self.early_stopping:
             _X, _y, _w, _info = self.train_data
@@ -180,13 +180,13 @@ class MultiTuner(Tuner):
             self.train_data = (_X[:split_point], _y[:split_point], _w[:split_point], _info[:split_point])
             self.es_data = (_X[split_point:], _y[split_point:], _w[split_point:], _info[split_point:])
         
-        self.val_data = self.data_loader.load_partitions(self.start_val_partition, self.end_val_partition)
+        self.val_data = self.loader.load_partitions(self.start_val_partition, self.end_val_partition)
     
         if self.is_neural:
             self.model_args = {'input_dim': self.train_data[0].shape[1:]}
             self.learn_args = {
                 'validation_data': self.es_data[:-1],
-                'epochs': 50,
+                'epochs': 1,
                 'early_stopping_rounds': 5,
                 'scheduler_type': 'simple_decay'
             }
@@ -232,7 +232,7 @@ if __name__ == "__main__":
     study_name = args.study_name if args.study_name is not None else \
         f'{args.model}_{args.n_seeds}seeds_{args.start_partition}_{args.end_partition}-{args.start_val_partition}_{args.end_val_partition}_{timestamp}'
         
-    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / study_name)
+    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' /str(args.model) / study_name)
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
     
     logger = setup_logger(out_dir)
