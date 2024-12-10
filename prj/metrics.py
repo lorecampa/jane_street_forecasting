@@ -30,3 +30,6 @@ def absolute_weighted_error_loss_fn(y_true: np.ndarray, y_pred: np.ndarray, w: n
 
 def log_cosh_weighted_loss_fn(y_true: np.ndarray, y_pred: np.ndarray, w: np.ndarray) -> np.ndarray:    
     return w.reshape(-1, 1) * np.log(np.cosh(y_true.reshape(-1, 1) - y_pred))
+
+def r2_weighted_loss_fn(y_true: np.ndarray, y_pred: np.ndarray, w: np.ndarray) -> np.ndarray:
+    return 1 - weighted_r2(y_true, y_pred, weights=w)

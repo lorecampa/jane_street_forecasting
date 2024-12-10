@@ -2,6 +2,7 @@ from datetime import datetime
 import argparse
 import gc
 from logging import Logger
+import polars as pl
 import os
 import time
 import optuna
@@ -14,7 +15,7 @@ from prj.data import DATA_ARGS_CONFIG
 from prj.data.data_loader import DataLoader
 from prj.hyperparameters_opt import SAMPLER
 from prj.logger import setup_logger
-from prj.metrics import absolute_weighted_error_loss_fn, weighted_mae, weighted_rmse, weighted_r2, weighted_mse, squared_weighted_error_loss_fn, log_cosh_weighted_loss_fn
+from prj.metrics import absolute_weighted_error_loss_fn, weighted_mae, weighted_rmse, weighted_r2, weighted_mse, squared_weighted_error_loss_fn, log_cosh_weighted_loss_fn, r2_weighted_loss_fn
 from prj.oamp.oamp import OAMP
 from prj.oamp.oamp_config import ConfigOAMP
 from prj.tuner import Tuner
@@ -141,13 +142,15 @@ class TunerOamp(Tuner):
         
         self.dates = info[:, 0]
         self.times = info[:, 1]
+        print(f"Loaded partition {self.start_partition}-{self.end_partition} with n = {pl.Series(self.dates).unique().len()} days")
         self.symbols = info[:, 2]
         self.agent_predictions = np.concatenate([agent.predict(X).reshape(-1, 1) for agent in tqdm(self.agents)], axis=1)
         
         self.losses_dict = {
             'mae': absolute_weighted_error_loss_fn,
             'mse': squared_weighted_error_loss_fn,
-            'log_cosh': log_cosh_weighted_loss_fn
+            'log_cosh': log_cosh_weighted_loss_fn,
+            'r2': r2_weighted_loss_fn,
         }
         
         del X
@@ -172,15 +175,16 @@ class TunerOamp(Tuner):
         self.model = OAMP(agents_count=len(self.agents), args=config)
         
         preds = []
-        last_day = 0
+        last_day_start_idx = 0
         for i in tqdm(range(self.agent_predictions.shape[0])):
             is_new_day = i > 0 and self.dates[i] != self.dates[i-1]
             if is_new_day:
                 # print(f'New day {self.dates[i]}, doing steps of previous day')
-                for j in range(last_day, i):
-                    is_new_group = j > last_day and self.times[j] != self.times[j-1]
+                for j in range(last_day_start_idx, i):
+                    # is_new_group = j > last_day_start_idx and self.times[j] != self.times[j-1]
+                    is_new_group = (j == (i - 1))
                     self.model.step(agent_losses[j], is_new_group=is_new_group)
-                last_day = i
+                last_day_start_idx = i
                 
             preds.append(self.model.compute_prediction(self.agent_predictions[i]))
                     

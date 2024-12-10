@@ -149,6 +149,8 @@ class Tuner:
                 
             os.makedirs(best_dir_path, exist_ok=True)
             best_params = SAMPLER[self.model_type](trial, additional_args=self.sampler_args)
+            save_dict_to_json(best_params, f'{best_dir_path}/best_params.json')
+            
             params = dict(
                 model_args=self.model_args,
                 custom_model_args=self.custom_model_args,
@@ -160,7 +162,7 @@ class Tuner:
             )
             if self.loader:
                 params.update(**self.loader.get_info())
-                
+            
             save_dict_to_pickle(params, f'{best_dir_path}/params.pkl')
             
             plot_dir = f'{best_dir_path}/plots'

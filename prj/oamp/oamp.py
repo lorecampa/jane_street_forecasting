@@ -30,7 +30,6 @@ class OAMP:
         self.agg_type = args.agg_type
         
         # Initializing OAMP
-        self.t = 0
         self.l_tm1 = np.zeros(agents_count)
         self.n_tm1 = np.ones(agents_count) * 0.25
         self.w_tm1 = np.ones(agents_count) / agents_count
@@ -61,21 +60,18 @@ class OAMP:
         # Updating agents' losses
         self.agents_losses.append(agents_losses)
         
-        if self.t > 0 and is_new_group: # New group
+        if is_new_group: # New group
             self.group_t += 1
         
         # Updating agents' weights
         if self.group_t > 0 and self.group_t == self.agents_weights_upd_freq:
-            # print(f'Updating agents weights at timestep {self.t} and group {self.group_t}, {self.groups[self.t]} {self.groups[self.t-1]}')
             self.update_agents_weights()
             self.group_t = 0
             
-        self.t += 1
         
     def update_agents_weights(
         self,
     ):
-        # print(f'Updating agents weights at timestep {self.t}')
         # Computing agents' losses
         l_t = self.compute_agents_losses()
         # Computing agents' regrets estimates
