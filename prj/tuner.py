@@ -96,7 +96,9 @@ class Tuner:
         os.makedirs(self.out_dir, exist_ok=True)
         os.makedirs(self.optuna_dir, exist_ok=True)
 
-          
+    def evaluate(self):
+        return self.model.evaluate(*self.val_data[:-1])
+    
     def optimize_hyperparameters(self, metric: str = 'r2_w'):
         def objective(trial: optuna.Trial):
             start_time = time.time()
@@ -110,7 +112,7 @@ class Tuner:
                         
             self.train(model_args=model_args, learn_args=learn_args)
                         
-            val_metrics = self.model.evaluate(*self.val_data[:-1])
+            val_metrics = self.evaluate()
             trial.set_user_attr("val_metrics", str(val_metrics))
             
             if trial.number % 5 == 0 or trial.number == self.n_trials:

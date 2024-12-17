@@ -5,7 +5,7 @@ def sample_oamp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     params = {
         "agents_weights_upd_freq": trial.suggest_int("agents_weights_upd_freq", 0, 20, step=1),
         "loss_fn_window": trial.suggest_int("loss_fn_window", 1, 50000, step=1000),
-        "loss_function": trial.suggest_categorical("loss_function", ["mse", "mae", "log_cosh", "r2"]),
+        "loss_function": trial.suggest_categorical("loss_function", ["mse", "mae", "log_cosh"]),
         "agg_type": trial.suggest_categorical("agg_type", ["mean", "median", "max"]),
     }
     
@@ -118,29 +118,33 @@ def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict = {}) 
     params = {
             'use_gaussian_noise': trial.suggest_categorical('use_gaussian_noise', [True, False]),
             'learning_rate': trial.suggest_float('learning_rate', 5e-5, 1e-3, log=True),
-            'use_scheduler': trial.suggest_categorical('use_scheduler', [True, False]),
         }
     if params['use_gaussian_noise']:
         params['gaussian_noise_std'] = trial.suggest_float('gaussian_noise_std', 1e-3, 1)
-    
-    if params['use_scheduler']:
-        params['scheduling_rate'] = trial.suggest_float('scheduling_rate', 1e-3, 0.1)
         
     return params
 
 def sample_mlp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
-    params = _sample_base_neural_params(trial, additional_args)
-    params.update({
-        'n_layers': trial.suggest_int('n_layers', 1, 5),
-        'start_units': trial.suggest_int('start_units', 64, 512),
-        'units_decay': trial.suggest_categorical('units_decay', [1, 1.5, 2, 2.5, 3]),
-        'dropout_rate': trial.suggest_float('dropout_rate', 0.01, 0.4),
-        'l1_lambda': trial.suggest_float('l1_lambda', 1e-5, 1e-2, log=True),
-        'l2_lambda': trial.suggest_float('l2_lambda', 1e-5, 1e-2, log=True),
-        'activation': trial.suggest_categorical('activation', ['relu', 'sigmoid', 'tanh', 'swish'])
-    })
+    params = _sample_base_neural_params(trial=trial, additional_args=additional_args)
+    
+    archs = {
+        'tiny': [64, 32],
+        'medium': [128, 64, 32],
+        'large': [256, 128, 64],
+        'xlarge': [512, 256, 128],
+        'xxlarge': [1024, 512, 256, 128],
+    }
+    
+    arch_type = trial.suggest_categorical('arch_type', list(archs.keys()))
+    
+    params = {
+        "hidden_dims": archs[arch_type],
+        "use_dropout": trial.suggest_categorical("use_dropout", [True, False]),
+        "use_bn": trial.suggest_categorical("use_bn", [True, False]),
+    }
+    if params['use_dropout']:
+        params['dropout_rate'] = trial.suggest_float('dropout_rate', 0.1, 0.5, step=0.05)
     return params
-
 
 
 def sample_cnn_resnet_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:

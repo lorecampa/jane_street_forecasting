@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import List, Union, Dict, Any
-
 import torch
 from torch.utils.data import DataLoader
 import lightning as L
 import lightning.pytorch.callbacks as C
+from prj.model.torch.callback import EpochStatsCallback
+
 
 
 def train(model: L.LightningModule,
@@ -14,7 +15,7 @@ def train(model: L.LightningModule,
           max_epochs: int = 1000,
           eval_frequency: int = 1,
           log_every_n_steps: int = 10,
-          precision: str = "16-mixed",
+          precision: str = "32-mixed",
           accumulate_grad_batches: int = 1,
           gradient_clip_val: int = 10,
           gradient_clip_algorithm: str = 'norm',
@@ -24,14 +25,18 @@ def train(model: L.LightningModule,
           early_stopping_cfg: Dict[str, Any] = None,
           use_model_ckpt: bool = True,
           model_ckpt_cfg: Dict[str, Any] = None,
+          accelerator: str = 'auto',
           seed: int = 42,
           compile: bool = False):
+    
     if compile:
-        model = torch.compile(model, fullgraph=False, dynamic=False)
+        model = torch.compile(model, fullgraph=True, dynamic=False)
 
     L.seed_everything(seed, workers=True)
 
-    callbacks = [C.ModelSummary(max_depth=3), C.LearningRateMonitor(logging_interval='epoch')]
+    callbacks = [C.ModelSummary(max_depth=3), 
+                 C.LearningRateMonitor(logging_interval='epoch'),
+                 EpochStatsCallback()]
     if use_swa:
         callbacks.append(C.StochasticWeightAveraging(**swa_cfg))
     if use_early_stopping:
@@ -47,8 +52,10 @@ def train(model: L.LightningModule,
         accumulate_grad_batches=accumulate_grad_batches,
         gradient_clip_val=gradient_clip_val,
         gradient_clip_algorithm=gradient_clip_algorithm,
+        accelerator=accelerator,
         callbacks=callbacks
     )
     trainer.fit(model=model, train_dataloaders=train_dataloader,
                 val_dataloaders=val_dataloader, ckpt_path=checkpoint_path)
     return model
+

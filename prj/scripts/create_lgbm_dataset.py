@@ -7,14 +7,20 @@ import pandas as pd
 import numpy as np
 from prj.config import DATA_DIR, EXP_DIR
 from prj.data import DATA_ARGS_CONFIG
-from prj.data.data_loader import DataLoader
+from prj.data.data_loader import DataConfig, DataLoader
 from prj.logger import get_default_logger
 
 def main(output_dir, num_bins, logger: logging.Logger): 
-    data_args = DATA_ARGS_CONFIG['lgbm']
-    loader = DataLoader(data_dir=DATA_DIR, **data_args)
     
-    X, y, w, _ = loader.load_partitions(5, 5)
+    config = DataConfig(
+        include_lags=False,
+        zero_fill=False,
+        ffill=False,            
+    )
+    loader = DataLoader(config=config)
+    
+    X, y, w, _ = loader.load_numpy(start_dt=1100)
+    
     features = loader.features
     categorical_features = []
     

@@ -5,6 +5,7 @@ dataset/*
 .venv
 
 __pycache__/
+**/__pycache__/
 .idea/
 .vscode/
 *.egg-info
@@ -18,3 +19,7 @@ saved_agents/
 
 catboost_info/
 **/catboost_info/
+
+
+**/lightning_logs/
+lightning_logs/

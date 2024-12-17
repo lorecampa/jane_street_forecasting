@@ -15,7 +15,7 @@ from prj.data import DATA_ARGS_CONFIG
 from prj.data.data_loader import DataLoader
 from prj.hyperparameters_opt import SAMPLER
 from prj.logger import setup_logger
-from prj.metrics import absolute_weighted_error_loss_fn, weighted_mae, weighted_rmse, weighted_r2, weighted_mse, squared_weighted_error_loss_fn, log_cosh_weighted_loss_fn, r2_weighted_loss_fn
+from prj.metrics import absolute_weighted_error_loss_fn, weighted_mae, weighted_rmse, weighted_r2, weighted_mse, squared_weighted_error_loss_fn, log_cosh_weighted_loss_fn
 from prj.oamp.oamp import OAMP
 from prj.oamp.oamp_config import ConfigOAMP
 from prj.tuner import Tuner
@@ -150,7 +150,6 @@ class TunerOamp(Tuner):
             'mae': absolute_weighted_error_loss_fn,
             'mse': squared_weighted_error_loss_fn,
             'log_cosh': log_cosh_weighted_loss_fn,
-            'r2': r2_weighted_loss_fn,
         }
         
         del X

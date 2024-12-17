@@ -204,4 +204,5 @@ class TabularNNModel(ABC):
         x = input
         if self.use_gaussian_noise:
             x = tfkl.GaussianNoise(self.gaussian_noise_std)(x)
+            
         return input, x

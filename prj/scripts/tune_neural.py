@@ -4,17 +4,16 @@ import gc
 from logging import Logger
 import os
 from prj.agents.AgentNeuralRegressor import NEURAL_NAME_MODEL_CLASS_DICT
-from prj.agents.AgentTreeRegressor import TREE_NAME_MODEL_CLASS_DICT
 from prj.agents.factory import AgentsFactory
 from prj.config import DATA_DIR, EXP_DIR
 from prj.data import DATA_ARGS_CONFIG
-from prj.data.data_loader import DataLoader
-from prj.hyperparameters_opt import SAMPLER
+from prj.data.data_loader import DataConfig, DataLoader as BaseDataLoader
 from prj.logger import setup_logger
+from prj.model.torch.datasets.base import JaneStreetBaseDataset
 from prj.tuner import Tuner
 from prj.utils import str_to_dict_arg
-import lightgbm as lgb
-
+from torch.utils.data import DataLoader
+import polars as pl
 
 def get_cli_args():
     """Create CLI parser and return parsed arguments"""
@@ -23,7 +22,7 @@ def get_cli_args():
     parser.add_argument(
         '--model',
         type=str,
-        default="lgbm",
+        default="mlp",
         help="Model name"
     )
     parser.add_argument(
@@ -66,12 +65,6 @@ def get_cli_args():
         default=0
     )
     parser.add_argument(
-        '--train',
-        action='store_true',
-        default=False,
-        help="Run only training, no optimization"
-    )
-    parser.add_argument(
         '--custom_model_args',
         type=str_to_dict_arg,
         default='{}',
@@ -85,6 +78,12 @@ def get_cli_args():
     )
     
     parser.add_argument(
+        '--train',
+        action='store_true',
+        default=False,
+        help="Run only training, no optimization"
+    )
+    parser.add_argument(
         '--gpu',
         action='store_true',
         default=False,
@@ -95,7 +94,7 @@ def get_cli_args():
     return parser.parse_args()
 
 
-class TunerLGBMBinary(Tuner):
+class NeuralTuner(Tuner):
     def __init__(
         self,
         model_type: str,
@@ -107,6 +106,7 @@ class TunerLGBMBinary(Tuner):
         study_name: str = None,
         n_trials: int = 50,
         verbose: int = 0,
+        early_stopping: bool = True,
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
         logger: Logger = None,
@@ -123,55 +123,101 @@ class TunerLGBMBinary(Tuner):
             verbose=verbose,
             custom_model_args=custom_model_args,
             custom_learn_args=custom_learn_args,
-            logger=logger,
+            logger=logger
         )
-                
-        model_dict = TREE_NAME_MODEL_CLASS_DICT | NEURAL_NAME_MODEL_CLASS_DICT
-        
+        self.early_stopping = early_stopping
+
+        model_dict = NEURAL_NAME_MODEL_CLASS_DICT
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
-      
-        self.model_args = {'verbose': self.verbose}
-        self.learn_args = {}
-        self.sampler_args = {'max_bin': 128, 'use_gpu': self.use_gpu}
+        num_workers = 3
         
-        binary_path_train = str(DATA_DIR.parent / f'binary/lgbm/lgbm_maxbin_128_5_9.bin')
-        print(f"Loading binary file: {binary_path_train}")
-        self.start_val_partition, self.end_val_partition = 9, 9
+        config = DataConfig(
+            include_lags=False,
+            zero_fill=True            
+        )
+        self.loader = BaseDataLoader(config=config)
+        self.features = self.loader.features
+        train_ds, val_ds = self.loader.load_train_and_val(start_dt=1100, val_ratio=0.15)        
+        es_ds = None
+        es_ratio = 0.10
+        if self.early_stopping:
+            train_dates = train_ds.select('date_id').unique().collect().to_series().sort()
+            split_point = int(len(train_dates) * (1 - es_ratio))
+            split_date = train_dates[split_point]
+            es_ds = train_ds.filter(pl.col('date_id').ge(split_date))
+            train_ds = train_ds.filter(pl.col('date_id').lt(split_date))
+        
+        n_rows_train = train_ds.select(pl.len()).collect().item()
+        n_dates_train = train_ds.select('date_id').unique().collect().count().item()
+        n_rows_es = es_ds.select(pl.len()).collect().item() if self.early_stopping else 0
+        n_dates_es = es_ds.select('date_id').unique().collect().count().item() if self.early_stopping else 0
+        n_rows_val = val_ds.select(pl.len()).collect().item()
+        n_dates_val = val_ds.select('date_id').unique().collect().count().item()
+        print(f'N rows train: {n_rows_train}, ES: {n_rows_es}, VAL: {n_rows_val}')
+        print(f'N dates train: {n_dates_train}, ES: {n_dates_es}, VAL: {n_dates_val}')
+                    
+        train_ds = JaneStreetBaseDataset(train_ds, features=self.features)
+        if self.early_stopping:
+            es_ds = JaneStreetBaseDataset(es_ds, features=self.features)
+        self.val_ds = JaneStreetBaseDataset(val_ds, features=self.features)
+        
+        
+        batch_size = 1024
+        self.train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        self.es_dataloader = None
+        if self.early_stopping:
+            self.es_dataloader = DataLoader(es_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+            
+            
+        self.model_args = {
+            'input_dim': (len(self.loader.features),),
+            'output_dim': 1,
+        }
+        self.learn_args = {
+            'max_epochs': 50,
+            'gradient_clip_val': 10,
+            'precision': '32-true',
+            'use_model_ckpt': False,
+        }
 
-        self.train_data = lgb.Dataset(data=binary_path_train, params={
-            'feature_pre_filter': False, 
-            'device': 'gpu' if self.use_gpu else 'cpu'
-        })
-        # self.loader = DataLoader(data_dir=self.data_dir, **data_args)
-        # self.val_data = self.loader.load_partitions(self.start_val_partition, self.end_val_partition)
-   
+    
     def train(self, model_args:dict, learn_args: dict):
-        self.model.train_native(
-            self.train_data,
+        self.model.train(
+            train_dataloader=self.train_dataloader,
+            val_dataloader=self.es_dataloader,
             model_args=model_args,
             learn_args=learn_args,
         )
-                                
+    
+    def evaluate(self):
+        return self.model.evaluate(
+            X=self.val_ds.X,
+            y=self.val_ds.y,
+            weights=self.val_ds.weights
+        )
 
+        
+        
+                        
 if __name__ == "__main__":
     args = get_cli_args()
     if not args.gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
-    data_dir = args.data_dir if args.data_dir is not None else DATA_DIR
-    
+    data_dir = args.data_dir if args.data_dir is not None else DATA_DIR    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     study_name = args.study_name if args.study_name is not None else \
-        f'{args.model}_{args.n_seeds}seeds_max_bin_128_0_8-9_9_{timestamp}'
+        f'{args.model}_{args.n_seeds}seeds_{timestamp}'
         
-    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / 'lgbm_binary' / study_name)
-    
+    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / 'tmp' / str(args.model) / study_name)
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
+    
     logger = setup_logger(out_dir)
     logger.info(f'Tuning model: {args.model}')
-    optimizer = TunerLGBMBinary(
+
+    optimizer = NeuralTuner(
         model_type=args.model,
         data_dir=data_dir,
         out_dir=out_dir,
@@ -185,7 +231,8 @@ if __name__ == "__main__":
         custom_learn_args=args.custom_learn_args,
         logger=logger
     )
-    optimizer.create_study()    
+    optimizer.create_study()
+
     if args.train:
         optimizer.train_best_trial()
         save_path = f'{out_dir}/train/model'
