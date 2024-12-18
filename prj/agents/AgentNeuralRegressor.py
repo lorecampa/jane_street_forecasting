@@ -37,6 +37,11 @@ class AgentNeuralRegressor(AgentRegressor):
         scheduler = 'ReduceLROnPlateau'
         scheduler_cfg = dict(mode='min', factor=0.1, patience=3, verbose=True, min_lr=1e-8)
         
+        use_gaussian_noise = model_args.pop('use_gaussian_noise', False)
+        gaussian_noise_std = model_args.pop('gaussian_noise_std', 0.1)
+        l1_lambda = model_args.pop('l1_lambda', 5e-5)
+        l2_lambda = model_args.pop('l2_lambda', 5e-5)
+        
         model = self.agent_class(**model_args)
         
         scheduler, scheduler_cfg = None, {}
@@ -52,6 +57,7 @@ class AgentNeuralRegressor(AgentRegressor):
         optimizer_cfg = {
             'lr': lr,
         }
+        
         model = JaneStreetModelWrapper(
             model, 
             losses=losses, 
@@ -60,6 +66,10 @@ class AgentNeuralRegressor(AgentRegressor):
             scheduler_cfg=scheduler_cfg,
             optimizer=optimizer,
             optimizer_cfg=optimizer_cfg,
+            use_gaussian_noise=use_gaussian_noise,
+            gaussian_noise_std=gaussian_noise_std,
+            l1_lambda=l1_lambda,
+            l2_lambda=l2_lambda
         )
         
         defalut_learn_args = {

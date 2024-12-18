@@ -38,6 +38,16 @@ def get_cli_args():
         help="number of iterations of optuna"
     )
     parser.add_argument(
+        '--start_dt',
+        type=int,
+        default=1100,
+    )
+    parser.add_argument(
+        '--end_dt',
+        type=int,
+        default=1698,
+    )
+    parser.add_argument(
         '--n_seeds',
         type=int,
         default=1
@@ -98,6 +108,8 @@ class NeuralTuner(Tuner):
     def __init__(
         self,
         model_type: str,
+        start_dt: int = 1100,
+        end_dt: int = None,
         data_dir: str = DATA_DIR,
         out_dir: str = '.',
         n_seeds: int = None,
@@ -126,11 +138,14 @@ class NeuralTuner(Tuner):
             logger=logger
         )
         self.early_stopping = early_stopping
-
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+        print(f'Start date: {start_dt}, End date: {end_dt}')
+        
         model_dict = NEURAL_NAME_MODEL_CLASS_DICT
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
-        num_workers = 3
+        num_workers = 0
         
         config = DataConfig(
             include_lags=False,
@@ -138,7 +153,7 @@ class NeuralTuner(Tuner):
         )
         self.loader = BaseDataLoader(config=config)
         self.features = self.loader.features
-        train_ds, val_ds = self.loader.load_train_and_val(start_dt=1100, val_ratio=0.15)        
+        train_ds, val_ds = self.loader.load_train_and_val(start_dt=self.start_dt, end_dt=self.end_dt, val_ratio=0.15)        
         es_ds = None
         es_ratio = 0.10
         if self.early_stopping:
@@ -209,7 +224,7 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     study_name = args.study_name if args.study_name is not None else \
-        f'{args.model}_{args.n_seeds}seeds_{timestamp}'
+        f'{args.model}_{args.n_seeds}seeds_{args.start_dt}-{args.end_dt}-{timestamp}'
         
     out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / 'tmp' / str(args.model) / study_name)
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
@@ -219,6 +234,8 @@ if __name__ == "__main__":
 
     optimizer = NeuralTuner(
         model_type=args.model,
+        start_dt=args.start_dt,
+        end_dt=args.end_dt,
         data_dir=data_dir,
         out_dir=out_dir,
         n_seeds=args.n_seeds,

@@ -3,11 +3,11 @@ import torch.nn as nn
 class Mlp(nn.Module):
     def __init__(self, 
                  input_dim, 
-                 hidden_dims=[], 
+                 hidden_dims=[],
                  use_dropout=True, 
                  dropout_rate=0.1, 
                  use_bn=True, 
-                 output_dim=1
+                 output_dim=1,
         ):
         super(Mlp, self).__init__()
         

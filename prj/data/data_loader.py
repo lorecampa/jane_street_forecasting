@@ -3,6 +3,18 @@ import typing
 from prj.config import DATA_DIR
 import polars as pl
 
+
+# [{'partition_id': 0, 'min_date': 0, 'max_date': 169},
+#  {'partition_id': 1, 'min_date': 170, 'max_date': 339},
+#  {'partition_id': 2, 'min_date': 340, 'max_date': 509},
+#  {'partition_id': 3, 'min_date': 510, 'max_date': 679},
+#  {'partition_id': 4, 'min_date': 680, 'max_date': 849},
+#  {'partition_id': 5, 'min_date': 850, 'max_date': 1019},
+#  {'partition_id': 6, 'min_date': 1020, 'max_date': 1189},
+#  {'partition_id': 7, 'min_date': 1190, 'max_date': 1359},
+#  {'partition_id': 8, 'min_date': 1360, 'max_date': 1529},
+#  {'partition_id': 9, 'min_date': 1530, 'max_date': 1698}]
+
 class DataConfig:
     def __init__(self, **kwargs):
         self.ffill = kwargs.get('ffill', False)
@@ -51,9 +63,9 @@ class DataLoader:
         info = df.select(self.time_cols + ['symbol_id']).collect().to_numpy()
         return X, y, w, info
     
-    def load_train_and_val(self, start_dt: int, val_ratio: float):
+    def load_train_and_val(self, start_dt: int, end_dt: None, val_ratio: float):
         assert val_ratio > 0 and val_ratio < 1, 'val_ratio must be in (0, 1)'
-        df = self.load(start_dt)
+        df = self.load(start_dt, end_dt)
         
         dates = df.select('date_id').unique().collect().to_series().sort()
         split_point = int(len(dates) * (1 - val_ratio))
@@ -72,10 +84,14 @@ class DataLoader:
             df = df.fill_nan(None).fill_null(strategy="zero")
         return self.build_splits(df)
         
-    def load(self, start_dt: int) -> pl.LazyFrame:
+    def load(self, start_dt: int, end_dt: int = None) -> pl.LazyFrame:
         df = self._load().filter(
             pl.col('date_id').gt(start_dt)
         )
+        if end_dt is not None:
+            df = df.filter(
+                pl.col('date_id').le(end_dt)
+            )
         if self.zero_fill:
             df = df.fill_nan(None).fill_null(strategy="zero")
         return df

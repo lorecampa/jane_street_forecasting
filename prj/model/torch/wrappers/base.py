@@ -98,7 +98,6 @@ class JaneStreetModelWrapper(L.LightningModule):
         self.model.eval()
         with torch.no_grad():
             y_hat: np.ndarray = self.model(torch.from_numpy(X)).squeeze().numpy()
-        
         return y_hat
     
     
