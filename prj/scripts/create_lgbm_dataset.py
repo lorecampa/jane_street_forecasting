@@ -15,6 +15,12 @@ def get_cli_args():
     parser = argparse.ArgumentParser()
     
     parser.add_argument(
+        '--data_dir',
+        type=int,
+        default=DATA_DIR,
+    )
+    
+    parser.add_argument(
         '--start_dt',
         type=int,
         default=PARTITIONS_DATE_INFO[5],
@@ -33,14 +39,14 @@ def get_cli_args():
     return parser.parse_args()
 
 
-def main(output_dir, num_bins, start_dt, end_dt, logger: logging.Logger): 
+def main(output_dir, data_dir, num_bins, start_dt, end_dt, logger: logging.Logger): 
     
     config = DataConfig(
         include_lags=False,
         zero_fill=False,
         ffill=False,            
     )
-    loader = DataLoader(config=config)
+    loader = DataLoader(data_dir=data_dir, config=config)
     
     X, y, w, _ = loader.load_numpy(start_dt=start_dt, end_dt=end_dt)
     
@@ -77,4 +83,4 @@ if __name__ == '__main__':
     )
     logger = get_default_logger()
         
-    main(OUTPUT_DIR, num_bins=args.max_bin, start_dt=args.start_dt, end_dt=args.end_dt, logger=logger)
+    main(OUTPUT_DIR, data_dir=args.data_dir, num_bins=args.max_bin, start_dt=args.start_dt, end_dt=args.end_dt, logger=logger)

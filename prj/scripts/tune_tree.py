@@ -165,7 +165,7 @@ class TreeTuner(Tuner):
         data_args = {}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
-        self.loader = DataLoader(config=config)
+        self.loader = DataLoader(data_dir=data_dir, config=config)
         
         
         train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
