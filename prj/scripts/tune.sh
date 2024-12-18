@@ -3,7 +3,7 @@
 # Neural
 MODEL=mlp
 START_DT=1020
-END_DT=1529
+END_DT=1300
 VAL_RATIO=0.2
 
 python prj/scripts/tune_neural.py \
@@ -14,6 +14,7 @@ python prj/scripts/tune_neural.py \
     --n_trials 100 \
     --n_seeds 1 \
     --verbose -1 \
+    --num_workers 0 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --gpu
 

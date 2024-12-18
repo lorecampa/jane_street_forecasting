@@ -111,6 +111,12 @@ def get_cli_args():
         default=False,
         help="Run only training with gpu"
     )
+    
+    parser.add_argument(
+        '--num_workers',
+        type=int,
+        default=0,
+    )
 
 
     return parser.parse_args()
@@ -135,6 +141,7 @@ class NeuralTuner(Tuner):
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
         custom_data_args: dict = {},
+        num_workers: int = 0,
         logger: Logger = None,
     ):
         super().__init__(
@@ -162,7 +169,7 @@ class NeuralTuner(Tuner):
         model_dict = NEURAL_NAME_MODEL_CLASS_DICT
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
-        num_workers = 0
+        self.num_workers = num_workers
         
         data_args = {'zero_fill': True}
         data_args.update(self.custom_data_args)
@@ -194,10 +201,10 @@ class NeuralTuner(Tuner):
         
         
         batch_size = 1024
-        self.train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        self.train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=self.num_workers)
         self.es_dataloader = None
         if self.early_stopping:
-            self.es_dataloader = DataLoader(es_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+            self.es_dataloader = DataLoader(es_ds, batch_size=batch_size, shuffle=False, num_workers=self.num_workers)
             
             
         self.model_args = {
@@ -271,7 +278,8 @@ if __name__ == "__main__":
         custom_learn_args=args.custom_learn_args,
         custom_data_args=args.custom_data_args,
         early_stopping=early_stopping,
-        logger=logger
+        logger=logger,
+        num_workers=args.num_workers
     )
     optimizer.create_study()
 
