@@ -7,7 +7,7 @@ from prj.agents.AgentNeuralRegressor import NEURAL_NAME_MODEL_CLASS_DICT
 from prj.agents.factory import AgentsFactory
 from prj.config import DATA_DIR, EXP_DIR
 from prj.data import DATA_ARGS_CONFIG
-from prj.data.data_loader import DataConfig, DataLoader as BaseDataLoader
+from prj.data.data_loader import PARTITIONS_DATE_INFO, DataConfig, DataLoader as BaseDataLoader
 from prj.logger import setup_logger
 from prj.model.torch.datasets.base import JaneStreetBaseDataset
 from prj.tuner import Tuner
@@ -40,12 +40,17 @@ def get_cli_args():
     parser.add_argument(
         '--start_dt',
         type=int,
-        default=1100,
+        default=PARTITIONS_DATE_INFO[6],
     )
     parser.add_argument(
         '--end_dt',
         type=int,
-        default=1698,
+        default=PARTITIONS_DATE_INFO[8],
+    )
+    parser.add_argument(
+        '--val_ratio',
+        type=float,
+        default=0.2,
     )
     parser.add_argument(
         '--n_seeds',
@@ -117,6 +122,7 @@ class NeuralTuner(Tuner):
         model_type: str,
         start_dt: int = 1100,
         end_dt: int = None,
+        val_ratio: float = 0.15,
         data_dir: str = DATA_DIR,
         out_dir: str = '.',
         n_seeds: int = None,
@@ -149,7 +155,9 @@ class NeuralTuner(Tuner):
         self.early_stopping = early_stopping
         self.start_dt = start_dt
         self.end_dt = end_dt
-        print(f'Start date: {start_dt}, End date: {end_dt}')
+        self.val_ratio = val_ratio
+        self.es_ratio = 0.10
+        print(f'Start date: {start_dt}, End date: {end_dt}, Val ratio: {val_ratio}, ES ratio: {self.es_ratio}')
         
         model_dict = NEURAL_NAME_MODEL_CLASS_DICT
         self.model_class = model_dict[self.model_type]
@@ -161,12 +169,11 @@ class NeuralTuner(Tuner):
         config = DataConfig(data_dir=data_dir, **data_args)
         self.loader = BaseDataLoader(config=config)
         self.features = self.loader.features
-        train_ds, val_ds = self.loader.load_train_and_val(start_dt=self.start_dt, end_dt=self.end_dt, val_ratio=0.15)        
+        train_ds, val_ds = self.loader.load_train_and_val(start_dt=self.start_dt, end_dt=self.end_dt, val_ratio=self.val_ratio)        
         es_ds = None
-        es_ratio = 0.10
         if self.early_stopping:
             train_dates = train_ds.select('date_id').unique().collect().to_series().sort()
-            split_point = int(len(train_dates) * (1 - es_ratio))
+            split_point = int(len(train_dates) * (1 - self.es_ratio))
             split_date = train_dates[split_point]
             es_ds = train_ds.filter(pl.col('date_id').ge(split_date))
             train_ds = train_ds.filter(pl.col('date_id').lt(split_date))
@@ -240,10 +247,17 @@ if __name__ == "__main__":
     logger = setup_logger(out_dir)
     logger.info(f'Tuning model: {args.model}')
 
+    early_stopping = True
+    val_ratio = args.val_ratio
+    if args.train:
+        early_stopping = False
+        val_ratio = 0.
+
     optimizer = NeuralTuner(
         model_type=args.model,
         start_dt=args.start_dt,
         end_dt=args.end_dt,
+        val_ratio=val_ratio,
         data_dir=data_dir,
         out_dir=out_dir,
         n_seeds=args.n_seeds,
@@ -255,6 +269,7 @@ if __name__ == "__main__":
         custom_model_args=args.custom_model_args,
         custom_learn_args=args.custom_learn_args,
         custom_data_args=args.custom_data_args,
+        early_stopping=early_stopping,
         logger=logger
     )
     optimizer.create_study()

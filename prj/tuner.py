@@ -9,6 +9,7 @@ from prj.config import DATA_DIR, GLOBAL_SEED
 from prj.hyperparameters_opt import SAMPLER
 from prj.logger import get_default_logger
 from prj.utils import save_dict_to_json, save_dict_to_pickle
+from optuna.samplers import BaseSampler, RandomSampler, TPESampler
 
 class Tuner:
     def __init__(
@@ -25,6 +26,7 @@ class Tuner:
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
         custom_data_args: dict = {},
+        sampler_method: str = 'tpe',
         logger: Logger = None
     ):
         self.model_type = model_type
@@ -50,7 +52,8 @@ class Tuner:
         
         self.use_gpu = use_gpu
         self.sampler_args = {'use_gpu': use_gpu}
-        
+        self.sampler_method = sampler_method
+        self.n_startup_trials = 10
         # Optuna
         self.storage = storage
         self.n_trials = n_trials
@@ -62,10 +65,23 @@ class Tuner:
         
         self._setup_directories()
         
+    
+    def _create_sampler(self) -> BaseSampler:
+        # n_warmup_steps: Disable pruner until the trial reaches the given number of steps.
+        if self.sampler_method == "random":
+            sampler: BaseSampler = RandomSampler(seed=self.seed)
+        elif self.sampler_method == "tpe":
+            sampler = TPESampler(n_startup_trials=self.n_startup_trials, multivariate=True)
+        else:
+            raise ValueError(f"Unknown sampler: {self.sampler_method}")
+        return sampler
+    
+    def create_study(self):
+        sampler = self._create_sampler()
         
-    def create_study(self):          
         self.study = optuna.create_study(
             study_name=self.study_name,
+            sampler=sampler,
             direction="maximize", 
             storage=self.storage,
             load_if_exists=True

@@ -172,7 +172,7 @@ class TreeTuner(Tuner):
         self.train_data = self.loader._build_splits(train_df)
         self.val_data = self.loader._build_splits(val_df)
 
-        self.model_args = {'verbose': self.verbose}
+        self.model_args = {}
         self.learn_args = {}
             
     
