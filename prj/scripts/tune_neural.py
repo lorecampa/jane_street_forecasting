@@ -28,7 +28,7 @@ def get_cli_args():
     parser.add_argument(
         '--data_dir',
         type=str,
-        default=None
+        default=DATA_DIR
     )
     
     parser.add_argument(
@@ -235,7 +235,6 @@ if __name__ == "__main__":
     if not args.gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
-    data_dir = args.data_dir if args.data_dir is not None else DATA_DIR    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     study_name = args.study_name if args.study_name is not None else \
@@ -258,7 +257,7 @@ if __name__ == "__main__":
         start_dt=args.start_dt,
         end_dt=args.end_dt,
         val_ratio=val_ratio,
-        data_dir=data_dir,
+        data_dir=args.data_dir,
         out_dir=out_dir,
         n_seeds=args.n_seeds,
         verbose=args.verbose,
