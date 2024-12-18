@@ -33,6 +33,7 @@ class DataLoader:
     ):
         if isinstance(data_dir, str):
             data_dir = Path(data_dir)
+            
         self.data_dir = data_dir
         self.config = config
         
@@ -105,7 +106,7 @@ class DataLoader:
 
     def _load(self) -> pl.LazyFrame:
         df = pl.scan_parquet(
-            DATA_DIR
+            self.data_dir
         )
         # preprocessing
         if self.include_lags:
