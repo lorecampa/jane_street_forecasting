@@ -7,10 +7,33 @@ import pandas as pd
 import numpy as np
 from prj.config import DATA_DIR, EXP_DIR
 from prj.data import DATA_ARGS_CONFIG
-from prj.data.data_loader import DataConfig, DataLoader
+from prj.data.data_loader import PARTITIONS_DATE_INFO, DataConfig, DataLoader
 from prj.logger import get_default_logger
 
-def main(output_dir, num_bins, logger: logging.Logger): 
+def get_cli_args():
+    """Create CLI parser and return parsed arguments"""
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument(
+        '--start_dt',
+        type=int,
+        default=PARTITIONS_DATE_INFO[5],
+    )
+    parser.add_argument(
+        '--end_dt',
+        type=int,
+        default=PARTITIONS_DATE_INFO[9],
+    )
+    
+    parser.add_argument(
+        '--max_bin',
+        type=int,
+        default=128,
+    )
+    return parser.parse_args()
+
+
+def main(output_dir, num_bins, start_dt, end_dt, logger: logging.Logger): 
     
     config = DataConfig(
         include_lags=False,
@@ -19,7 +42,7 @@ def main(output_dir, num_bins, logger: logging.Logger):
     )
     loader = DataLoader(config=config)
     
-    X, y, w, _ = loader.load_numpy(start_dt=1100)
+    X, y, w, _ = loader.load_numpy(start_dt=start_dt, end_dt=end_dt)
     
     features = loader.features
     categorical_features = []
@@ -47,11 +70,11 @@ def main(output_dir, num_bins, logger: logging.Logger):
     
     
 if __name__ == '__main__':
+    args = get_cli_args()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     OUTPUT_DIR = str(
-        EXP_DIR / f"lgbm_dataset_{timestamp}"
+        EXP_DIR / f"lgbm_dataset_{args.start_dt}_{args.end_dt}{timestamp}"
     )
-    NUM_BINS = 128
     logger = get_default_logger()
         
-    main(OUTPUT_DIR, NUM_BINS, logger)
+    main(OUTPUT_DIR, num_bins=args.max_bin, start_dt=args.start_dt, end_dt=args.end_dt, logger=logger)

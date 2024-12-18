@@ -3,17 +3,18 @@ import typing
 from prj.config import DATA_DIR
 import polars as pl
 
-
-# [{'partition_id': 0, 'min_date': 0, 'max_date': 169},
-#  {'partition_id': 1, 'min_date': 170, 'max_date': 339},
-#  {'partition_id': 2, 'min_date': 340, 'max_date': 509},
-#  {'partition_id': 3, 'min_date': 510, 'max_date': 679},
-#  {'partition_id': 4, 'min_date': 680, 'max_date': 849},
-#  {'partition_id': 5, 'min_date': 850, 'max_date': 1019},
-#  {'partition_id': 6, 'min_date': 1020, 'max_date': 1189},
-#  {'partition_id': 7, 'min_date': 1190, 'max_date': 1359},
-#  {'partition_id': 8, 'min_date': 1360, 'max_date': 1529},
-#  {'partition_id': 9, 'min_date': 1530, 'max_date': 1698}]
+PARTITIONS_DATE_INFO = {
+    0: {'min_date': 0, 'max_date': 169},
+    1: {'min_date': 170, 'max_date': 339},
+    2: {'min_date': 340, 'max_date': 509},
+    3: {'min_date': 510, 'max_date': 679},
+    4: {'min_date': 680, 'max_date': 849},
+    5: {'min_date': 850, 'max_date': 1019},
+    6: {'min_date': 1020, 'max_date': 1189},
+    7: {'min_date': 1190, 'max_date': 1359},
+    8: {'min_date': 1360, 'max_date': 1529},
+    9: {'min_date': 1530, 'max_date': 1698}
+}
 
 class DataConfig:
     def __init__(self, **kwargs):
@@ -56,7 +57,7 @@ class DataLoader:
         self.time_cols = ['date_id', 'time_id']
         
     
-    def build_splits(self, df: pl.LazyFrame):
+    def _build_splits(self, df: pl.LazyFrame):
         X = df.select(self.features).cast(pl.Float32).collect().to_numpy()
         y = df.select(self.target).cast(pl.Float32).collect().to_series().to_numpy()
         w = df.select('weight').cast(pl.Float32).collect().to_series().to_numpy()
@@ -78,11 +79,9 @@ class DataLoader:
         return df_train, df_val
         
         
-    def load_numpy(self, start_dt: int):
-        df = self.load(start_dt)
-        if self.zero_fill:
-            df = df.fill_nan(None).fill_null(strategy="zero")
-        return self.build_splits(df)
+    def load_numpy(self, start_dt: int, end_dt: int = None):
+        df = self.load(start_dt, end_dt)
+        return self._build_splits(df)
         
     def load(self, start_dt: int, end_dt: int = None) -> pl.LazyFrame:
         df = self._load().filter(
@@ -92,9 +91,16 @@ class DataLoader:
             df = df.filter(
                 pl.col('date_id').le(end_dt)
             )
+        if self.ffill:
+            df = df.fill_nan(None).fill_null(strategy="forward", limit=10)
         if self.zero_fill:
             df = df.fill_nan(None).fill_null(strategy="zero")
         return df
+    
+    def load_with_partition_id(self, start_part_id: int, end_part_id: int = None) -> pl.LazyFrame:
+        start_dt = PARTITIONS_DATE_INFO[start_part_id]['min_date']
+        end_dt = PARTITIONS_DATE_INFO[end_part_id]['max_date'] if end_part_id is not None else None
+        return self.load(start_dt, end_dt)
     
 
     def _load(self) -> pl.LazyFrame:
