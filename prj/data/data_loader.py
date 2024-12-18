@@ -28,7 +28,7 @@ class DataConfig:
 class DataLoader:
     def __init__(
         self, 
-        data_dir: typing.Union[str | Path] = DATA_DIR,
+        data_dir: typing.Union[str | Path],
         config: DataConfig = DataConfig(),
     ):
         if isinstance(data_dir, str):

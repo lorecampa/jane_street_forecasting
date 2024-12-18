@@ -173,6 +173,9 @@ class TreeTuner(Tuner):
         self.val_data = self.loader._build_splits(val_df)
 
         self.model_args = {}
+        if model_type == 'lgbm':
+            self.model_args.update({'verbose': -1})
+            
         self.learn_args = {}
             
     

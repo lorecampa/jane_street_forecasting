@@ -166,8 +166,8 @@ class NeuralTuner(Tuner):
         
         data_args = {'zero_fill': True}
         data_args.update(self.custom_data_args)
-        config = DataConfig(data_dir=data_dir, **data_args)
-        self.loader = BaseDataLoader(config=config)
+        config = DataConfig(**data_args)
+        self.loader = BaseDataLoader(data_dir=data_dir, config=config)
         self.features = self.loader.features
         train_ds, val_ds = self.loader.load_train_and_val(start_dt=self.start_dt, end_dt=self.end_dt, val_ratio=self.val_ratio)        
         es_ds = None
