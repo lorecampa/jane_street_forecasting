@@ -39,7 +39,7 @@ def get_cli_args():
     )
     parser.add_argument(
         '--val_ratio',
-        type=int,
+        type=float,
         default=0.15,
     )
     parser.add_argument(

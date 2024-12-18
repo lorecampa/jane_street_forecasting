@@ -13,21 +13,19 @@ python prj/scripts/tune_neural.py \
 
 
 # Tree
-START_PARTITION=4
-END_PARTITION=8
-START_VAL_PARTITION=9
-END_VAL_PARTITION=9
+START_DT=1100
+END_DT=1200
 
-python prj/scripts/tune.py \
-    --model xgb \
+python prj/scripts/tune_tree.py \
+    --model lgbm \
+    --start_dt $START_DT \
+    --end_dt $END_DT \
+    --val_ratio 0.2 \
     --n_trials 100 \
-    --start_partition $START_PARTITION \
-    --end_partition $END_PARTITION \
-    --start_val_partition $START_VAL_PARTITION \
-    --end_val_partition $END_VAL_PARTITION \
     --n_seeds 1 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
-    --gpu
+
+
 
 # Tree LGBM Binary
 python prj/scripts/tune_lgbm_binary.py \
