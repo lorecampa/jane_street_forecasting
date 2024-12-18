@@ -24,6 +24,7 @@ class Tuner:
         use_gpu: bool = False,
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
+        custom_data_args: dict = {},
         logger: Logger = None
     ):
         self.model_type = model_type
@@ -45,6 +46,7 @@ class Tuner:
         self.model_args = {}
         self.custom_learn_args = custom_learn_args
         self.learn_args = {}
+        self.custom_data_args = custom_data_args
         
         self.use_gpu = use_gpu
         self.sampler_args = {'use_gpu': use_gpu}

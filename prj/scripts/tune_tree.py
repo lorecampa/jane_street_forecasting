@@ -93,6 +93,12 @@ def get_cli_args():
         default='{}',
         help="Custom arguments in dictionary format"
     )
+    parser.add_argument(
+        '--custom_data_args',
+        type=str_to_dict_arg,
+        default='{}',
+        help="Custom arguments in dictionary format"
+    )
     
     parser.add_argument(
         '--train',
@@ -128,6 +134,7 @@ class TreeTuner(Tuner):
         verbose: int = 0,
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
+        custom_data_args: dict = {},
         logger: Logger = None,
     ):
         super().__init__(
@@ -142,6 +149,7 @@ class TreeTuner(Tuner):
             verbose=verbose,
             custom_model_args=custom_model_args,
             custom_learn_args=custom_learn_args,
+            custom_data_args=custom_data_args,
             logger=logger
         )
         
@@ -154,11 +162,9 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
-        config = DataConfig(
-            include_lags=False,
-            zero_fill=False,
-            ffill=False,            
-        )
+        data_args = {}
+        data_args.update(self.custom_data_args)
+        config = DataConfig(**data_args)
         self.loader = DataLoader(config=config)
         
         
@@ -212,6 +218,7 @@ if __name__ == "__main__":
         use_gpu=args.gpu,
         custom_model_args=args.custom_model_args,
         custom_learn_args=args.custom_learn_args,
+        custom_data_args=args.custom_data_args,
         logger=logger
     )
     optimizer.create_study()

@@ -86,6 +86,13 @@ def get_cli_args():
         default='{}',
         help="Custom arguments in dictionary format"
     )
+    parser.add_argument(
+        '--custom_data_args',
+        type=str_to_dict_arg,
+        default='{}',
+        help="Custom arguments in dictionary format"
+    )
+    
     
     parser.add_argument(
         '--train',
@@ -121,6 +128,7 @@ class NeuralTuner(Tuner):
         early_stopping: bool = True,
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
+        custom_data_args: dict = {},
         logger: Logger = None,
     ):
         super().__init__(
@@ -135,6 +143,7 @@ class NeuralTuner(Tuner):
             verbose=verbose,
             custom_model_args=custom_model_args,
             custom_learn_args=custom_learn_args,
+            custom_data_args=custom_data_args,
             logger=logger
         )
         self.early_stopping = early_stopping
@@ -147,10 +156,9 @@ class NeuralTuner(Tuner):
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
         num_workers = 0
         
-        config = DataConfig(
-            include_lags=False,
-            zero_fill=True            
-        )
+        data_args = {'zero_fill': True}
+        data_args.update(self.custom_data_args)
+        config = DataConfig(**data_args)
         self.loader = BaseDataLoader(config=config)
         self.features = self.loader.features
         train_ds, val_ds = self.loader.load_train_and_val(start_dt=self.start_dt, end_dt=self.end_dt, val_ratio=0.15)        
@@ -246,6 +254,7 @@ if __name__ == "__main__":
         use_gpu=args.gpu,
         custom_model_args=args.custom_model_args,
         custom_learn_args=args.custom_learn_args,
+        custom_data_args=args.custom_data_args,
         logger=logger
     )
     optimizer.create_study()
