@@ -235,6 +235,8 @@ if __name__ == "__main__":
     if not args.gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+    print(f'Loading dataset from {args.data_dir}')
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     study_name = args.study_name if args.study_name is not None else \
