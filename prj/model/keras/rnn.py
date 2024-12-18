@@ -2,7 +2,7 @@ import keras as tfk
 from keras import layers as tfkl
 from keras import metrics as tfkm
 from keras import optimizers as tfko
-from prj.model.nn.neural import TabularNNModel
+from prj.model.keras.neural import TabularNNModel
 
 
 class Rnn(TabularNNModel):    

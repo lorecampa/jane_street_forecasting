@@ -3,7 +3,7 @@
 # Neural
 MODEL=mlp
 START_DT=1020
-END_DT=1300
+END_DT=1529
 VAL_RATIO=0.2
 
 python prj/scripts/tune_neural.py \
@@ -14,7 +14,8 @@ python prj/scripts/tune_neural.py \
     --n_trials 100 \
     --n_seeds 1 \
     --verbose -1 \
-    --num_workers 0 \
+    --num_workers 3 \
+    --study_name mlp_1seeds_1020-1529-20241218_115034 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --gpu
 
@@ -25,14 +26,15 @@ START_DT=1020
 END_DT=1529
 
 python prj/scripts/tune_tree.py \
-    --model lgbm \
+    --model catboost \
     --start_dt $START_DT \
     --end_dt $END_DT \
     --val_ratio 0.2 \
-    --n_trials 10 \
+    --n_trials 100 \
     --n_seeds 1 \
-    --study_name lgbm_1seeds_1020_1529-0.2_20241218_104118 \
+    --study_name catboost_1seeds_1020_1529-0.2_20241218_104022 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --train
 
 
 

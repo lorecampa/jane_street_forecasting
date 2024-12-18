@@ -13,7 +13,7 @@ from prj.hyperparameters_opt import SAMPLER
 from prj.logger import setup_logger
 from prj.tuner import Tuner
 from prj.utils import str_to_dict_arg
-
+import polars as pl
 
 
 def get_cli_args():
@@ -157,6 +157,8 @@ class TreeTuner(Tuner):
         self.end_dt = end_dt
         self.val_ratio = val_ratio
         
+        print(f'Using model: {model_type}, start_dt: {start_dt}, end_dt: {end_dt}, val_ratio: {val_ratio}')
+        
         model_dict = TREE_NAME_MODEL_CLASS_DICT
         
         self.model_class = model_dict[self.model_type]
@@ -171,6 +173,11 @@ class TreeTuner(Tuner):
         train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
         self.train_data = self.loader._build_splits(train_df)
         self.val_data = self.loader._build_splits(val_df)
+        
+        
+        print(f'X_train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
+        
+        
 
         self.model_args = {}
         if model_type == 'lgbm':
@@ -205,12 +212,16 @@ if __name__ == "__main__":
     
     logger = setup_logger(out_dir)
     logger.info(f'Tuning model: {args.model}')
+    
+    val_ratio = args.val_ratio
+    if args.train:
+        val_ratio = 0.
 
     optimizer = TreeTuner(
         model_type=args.model,
         start_dt=args.start_dt,
         end_dt=args.end_dt,
-        val_ratio=args.val_ratio,
+        val_ratio=val_ratio,
         data_dir=data_dir,
         out_dir=out_dir,
         n_seeds=args.n_seeds,
@@ -227,6 +238,7 @@ if __name__ == "__main__":
     optimizer.create_study()
 
     if args.train:
+        print('Training best trial')
         optimizer.train_best_trial()
         save_path = f'{out_dir}/train/model'
         os.makedirs(save_path, exist_ok=True)

@@ -66,12 +66,12 @@ class DataLoader:
         return X, y, w, info
     
     def load_train_and_val(self, start_dt: int, end_dt: None, val_ratio: float):
-        assert val_ratio > 0 and val_ratio < 1, 'val_ratio must be in (0, 1)'
+        assert val_ratio >= 0 and val_ratio <= 1, 'val_ratio must be in (0, 1)'
         df = self.load(start_dt, end_dt)
         
         dates = df.select('date_id').unique().collect().to_series().sort()
         split_point = int(len(dates) * (1 - val_ratio))
-        split_date = dates[split_point]
+        split_date = dates[split_point] if val_ratio > 0 else dates[-1] + 1
 
         
         df_train = df.filter(pl.col('date_id').lt(split_date))

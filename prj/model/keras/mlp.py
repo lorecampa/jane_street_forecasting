@@ -1,7 +1,7 @@
 import keras as tfk
 from keras import layers as tfkl
 from prj.config import GLOBAL_SEED
-from prj.model.nn.neural import TabularNNModel
+from prj.model.keras.neural import TabularNNModel
 
 
 class Mlp(TabularNNModel):

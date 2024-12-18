@@ -2,7 +2,7 @@ import keras as tfk
 from keras import layers as tfkl
 
 
-from prj.model.nn.neural import TabularNNModel
+from prj.model.keras.neural import TabularNNModel
 
 class CnnResnet(TabularNNModel):
     ID = 'DeepCNNResnet'
