@@ -120,10 +120,14 @@ def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict = {}) 
         'learning_rate': trial.suggest_float('learning_rate', 5e-5, 1e-3, log=True),
         'l1_lambda': trial.suggest_float('l1_lambda', 1e-7, 1e-4, log=True),
         'l2_lambda': trial.suggest_float('l2_lambda', 1e-7, 1e-4, log=True),
+        'use_scheduler': trial.suggest_categorical('use_scheduler', [True, False]),
     }
     
     if params['use_gaussian_noise']:
         params['gaussian_noise_std'] = trial.suggest_float('gaussian_noise_std', 1e-3, 1)
+        
+    if params['use_scheduler']:
+        params['scheduling_rate'] = trial.suggest_float('scheduling_rate', 1e-3, 0.1)
         
     return params
 
@@ -138,7 +142,7 @@ def sample_mlp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
         'xxlarge': [1024, 512, 256, 128],
     }
     
-    arch_type = trial.suggest_categorical('arch_type', list(archs.keys()))
+    arch_type = trial.suggest_categorical('arch_type', sorted(list(archs.keys())))
     
     params.update({
         "hidden_dims": archs[arch_type],
@@ -147,6 +151,8 @@ def sample_mlp_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     })
     if params['use_dropout']:
         params['dropout_rate'] = trial.suggest_float('dropout_rate', 0.1, 0.5, step=0.05)
+        
+
     return params
 
 

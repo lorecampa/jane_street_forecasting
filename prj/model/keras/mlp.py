@@ -70,6 +70,7 @@ class Mlp(TabularNNModel):
             units=self.output_dim,
             kernel_initializer=tfk.initializers.GlorotUniform(),
             kernel_regularizer=tfk.regularizers.l1_l2(l1=self.l1_lambda, l2=self.l2_lambda),
+            name='output_dense',
             activation='linear'
         )(x)
         

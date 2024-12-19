@@ -59,10 +59,8 @@ class AgentNeuralRegressor(AgentRegressor):
             curr_agent: TabularNNModel = self.agent_class(**curr_model_args, random_seed=seed)
             
             optimizer = tfko.Adam(learning_rate=learning_rate)
-            # loss = WeightedZeroMeanR2Loss()
             loss = keras.losses.MeanSquaredError()
             metrics = [tfkm.R2Score(), tfkm.MeanSquaredError()]
-            
             
             lr_scheduler = None
             scheduler_type = learn_args.get('scheduler_type', 'simple_decay')

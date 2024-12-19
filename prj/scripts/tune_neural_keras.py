@@ -141,7 +141,6 @@ class NeuralTuner(Tuner):
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
         custom_data_args: dict = {},
-        num_workers: int = 0,
         logger: Logger = None,
     ):
         super().__init__(
@@ -162,8 +161,6 @@ class NeuralTuner(Tuner):
         self.early_stopping = early_stopping
         self.start_dt = start_dt
         self.end_dt = end_dt
-        self.end_dt = start_dt + 100
-        
         
         self.val_ratio = val_ratio
         self.es_ratio = 0.10
@@ -172,9 +169,8 @@ class NeuralTuner(Tuner):
         model_dict = NEURAL_NAME_MODEL_CLASS_DICT
         self.model_class = model_dict[self.model_type]
         self.model: AgentNeuralRegressor = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
-        self.num_workers = num_workers
         
-        data_args = {'zero_fill': True}
+        data_args = {'zero_fill': True, 'ffill': False}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = BaseDataLoader(data_dir=data_dir, config=config)
@@ -197,12 +193,10 @@ class NeuralTuner(Tuner):
         print(f'N rows train: {n_rows_train}, ES: {n_rows_es}, VAL: {n_rows_val}')
         print(f'N dates train: {n_dates_train}, ES: {n_dates_es}, VAL: {n_dates_val}')
                   
-                  
-                  
         self.X_train, self.y_train, self.weights_train, _ = self.loader._build_splits(train_ds)
-        
         if self.early_stopping:
-            self.X_es, self.y_es, self.weights_es, _ = self.loader._build_splits(es_ds)
+            self.X_es, self.y_es, self.weights_es, _ = self.loader._build_splits(es_ds)        
+        self.X_val, self.y_val, self.weights_val, _ = self.loader._build_splits(val_ds)
         
         self.model_args = {
             'input_dim': (len(self.loader.features),),
@@ -212,7 +206,7 @@ class NeuralTuner(Tuner):
             'epochs': 50,
             'validation_data': (self.X_es, self.y_es, self.weights_es) if self.early_stopping else None,
             'early_stopping_rounds': 5,
-            'batch_size': 1024,
+            'batch_size': 2048,
         }
 
     
@@ -226,17 +220,12 @@ class NeuralTuner(Tuner):
         )
     
     def evaluate(self):
-        X_val, y_val, weights_val, _ = self.loader._build_splits(self.val_ds)
-        
         return self.model.evaluate(
-            X=X_val,
-            y=y_val,
-            weights=weights_val
+            X=self.X_val,
+            y=self.y_val,
+            weights=self.weights_val,
         )
-
-        
-        
-                        
+                       
 if __name__ == "__main__":
     args = get_cli_args()
     if not args.gpu:
@@ -279,7 +268,6 @@ if __name__ == "__main__":
         custom_data_args=args.custom_data_args,
         early_stopping=early_stopping,
         logger=logger,
-        num_workers=args.num_workers
     )
     optimizer.create_study()
 

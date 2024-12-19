@@ -20,6 +20,24 @@ python prj/scripts/tune_neural.py \
     --gpu
 
 
+# Neural kears
+MODEL=mlp
+START_DT=850
+END_DT=1529
+VAL_RATIO=0.2
+
+python prj/scripts/tune_neural_keras.py \
+    --model mlp \
+    --start_dt $START_DT \
+    --end_dt $END_DT \
+    --val_ratio $VAL_RATIO \
+    --n_trials 100 \
+    --n_seeds 1 \
+    --verbose -1 \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --gpu
+
+
 
 # Tree
 START_DT=850
