@@ -19,25 +19,16 @@ class Mlp(TabularNNModel):
         model_name: str = 'model',
         random_seed: int = GLOBAL_SEED,
         logger = print,
-        n_layers: int = 1,
-        start_units: int = 128,
-        units_decay: int = 2,
+        hidden_units: list = [128, 64, 32],
         dropout_rate: float = 0.1,
         l1_lambda: float = 1e-4,
         l2_lambda: float = 1e-4,
         activation: str = 'relu',
+        use_dropout: bool = False,
+        use_batch_norm: bool = False,
+        use_tanh: bool = False,
         **kwargs
     ):
-        '''
-        Args:
-            n_layers (int): the number of layers
-            start_units (int): the number of hidden units in the first layer
-            units_decay (int): the decay to decrease the number of hidden units at each layer
-            dropout_rate (float): the dropout rate
-            l1_lambda (float): l1 regularization coefficient
-            l2_lambda (float): l2 regularization coefficient
-            activation (str): the activation function of the hidden layers
-        '''
         super(Mlp, self).__init__(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -49,36 +40,40 @@ class Mlp(TabularNNModel):
             logger=logger,
             **kwargs
         )
-        self.n_layers = n_layers
-        self.start_units = start_units
-        self.units_decay = units_decay
+        self.hidden_units = hidden_units
         self.dropout_rate = dropout_rate
         self.l1_lambda = l1_lambda
         self.l2_lambda = l2_lambda
         self.activation = activation
         self.output_dim = output_dim
+        self.use_dropout = use_dropout
+        self.use_batch_norm = use_batch_norm
+        self.use_tanh=use_tanh
     
     def _build(self):
         input, x = self._build_input_layers()
 
-        units = self.start_units
-        for i in range(self.n_layers):
+        for i, units in enumerate(self.hidden_units):            
             x = tfkl.Dense(
                 units=units,
-                kernel_initializer=tfk.initializers.HeNormal(seed=self.random_seed),
+                kernel_initializer=tfk.initializers.HeNormal(),
                 kernel_regularizer=tfk.regularizers.l1_l2(l1=self.l1_lambda, l2=self.l2_lambda),
-                name=f'Dense{i}'
+                name=f'dense_{i}'
             )(x)
-            x = tfkl.BatchNormalization(name=f'BatchNormalization{i}')(x)
-            x = tfkl.Activation(self.activation, name=f'Activation{i}')(x)
-            x = tfkl.Dropout(self.dropout_rate, name=f'Dropout{i}')(x)
-            units = int(units / self.units_decay)
+            if self.use_batch_norm:
+                x = tfkl.BatchNormalization()(x)
+            x = tfkl.Activation(self.activation)(x)
+            if self.use_dropout:
+                x = tfkl.Dropout(self.dropout_rate)(x)
 
         outputs = tfkl.Dense(
             units=self.output_dim,
-            kernel_initializer=tfk.initializers.GlorotUniform(seed=self.random_seed),
+            kernel_initializer=tfk.initializers.GlorotUniform(),
             kernel_regularizer=tfk.regularizers.l1_l2(l1=self.l1_lambda, l2=self.l2_lambda),
-            name='OutputDense',
             activation='linear'
         )(x)
+        
+        if self.use_tanh:
+            outputs = tfkl.Activation('tanh')(outputs)
+        
         self.model = tfk.Model(inputs=input, outputs=outputs)

@@ -109,12 +109,6 @@ class DataLoader:
             )
         return df
     
-    def load_with_partition_id(self, start_part_id: int, end_part_id: int = None) -> pl.LazyFrame:
-        start_dt = PARTITIONS_DATE_INFO[start_part_id]['min_date']
-        end_dt = PARTITIONS_DATE_INFO[end_part_id]['max_date'] if end_part_id is not None else None
-        return self.load(start_dt, end_dt)
-    
-
     def _load(self) -> pl.LazyFrame:
         df = pl.scan_parquet(
             self.data_dir
