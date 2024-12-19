@@ -154,8 +154,14 @@ class TunerOamp(Tuner):
             TunerOamp.metrics(y_true=self.y, y_pred=self.agent_predictions[:, i], weights=self.w)
             for i in range(self.agent_predictions.shape[1])
         ]
-        single_agent_metrics = dict(zip(self.agent_types, single_agent_metrics))
-        save_dict_to_json(single_agent_metrics, os.path.join(out_dir, 'single_agent_metrics.json'))
+        
+        baseline_metrics = dict(zip(self.agent_types, single_agent_metrics))
+        baseline_metrics['mean'] = TunerOamp.metrics(y_true=self.y, y_pred=np.mean(self.agent_predictions, axis=1), weights=self.w)
+        baseline_metrics['median'] = TunerOamp.metrics(y_true=self.y, y_pred=np.median(self.agent_predictions, axis=1), weights=self.w)
+        baseline_metrics['max'] = TunerOamp.metrics(y_true=self.y, y_pred=np.max(self.agent_predictions, axis=1), weights=self.w)
+        baseline_metrics['min'] = TunerOamp.metrics(y_true=self.y, y_pred=np.min(self.agent_predictions, axis=1), weights=self.w)
+        baseline_metrics = dict(sorted(baseline_metrics.items(), key=lambda item: item[1]['r2_w'], reverse=True))
+        save_dict_to_json(baseline_metrics, os.path.join(out_dir, 'baseline_metrics.json'))
         
         self.losses_dict = {
             'mae': absolute_weighted_error_loss_fn,
@@ -179,7 +185,6 @@ class TunerOamp(Tuner):
             raise ValueError(f"Loss function {loss_fn} not found in agent losses")
 
         agent_losses = self.losses_dict[loss_fn](y_true=self.y, y_pred=self.agent_predictions, w=self.w)  
-        print(agent_losses.shape)
            
         config = ConfigOAMP(model_args)
         self.model = OAMP(agents_count=len(self.agents), args=config)

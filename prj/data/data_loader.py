@@ -90,17 +90,23 @@ class DataLoader:
         return self.load(start_dt, end_dt)
         
     def load(self, start_dt: int, end_dt: int = None) -> pl.LazyFrame:
+        assert start_dt >= PARTITIONS_DATE_INFO[0]['min_date'] and start_dt <= PARTITIONS_DATE_INFO[9]['max_date'], 'start_dt out of range'
+        assert end_dt is None or (end_dt >= PARTITIONS_DATE_INFO[0]['min_date'] and end_dt <= PARTITIONS_DATE_INFO[9]['max_date']), 'end_dt out of range'
+        assert start_dt <= end_dt, 'start_dt must be less than or equal end_dt'
+        
+        end_dt = end_dt if end_dt is not None else PARTITIONS_DATE_INFO[9]['max_date']
         df = self._load().filter(
-            pl.col('date_id').ge(start_dt)
+            pl.col('date_id').is_between(start_dt, end_dt, closed='both'),
         )
-        if end_dt is not None:
-            df = df.filter(
-                pl.col('date_id').le(end_dt)
-            )
+                
         if self.ffill:
-            df = df.fill_nan(None).fill_null(strategy="forward", limit=10)
+            df = df.with_columns(
+                pl.col(self.features).fill_nan(None).fill_null(strategy="forward", limit=10).over('symbol_id')
+            )
         if self.zero_fill:
-            df = df.fill_nan(None).fill_null(strategy="zero")
+            df = df.with_columns(
+                pl.col(self.features).fill_nan(None).fill_null(strategy="zero")
+            )
         return df
     
     def load_with_partition_id(self, start_part_id: int, end_part_id: int = None) -> pl.LazyFrame:
@@ -124,9 +130,6 @@ class DataLoader:
             ).group_by(['date_id', 'symbol_id'], maintain_order=True).last()
 
             df = df.join(lags, on=['date_id', 'symbol_id'], how='left', maintain_order='left')
-        
-        if self.ffill:
-            df = df.fill_nan(None).fill_null(strategy="forward", limit=10)
         
         return df
 
