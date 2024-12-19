@@ -127,9 +127,10 @@ class DataLoader:
                 pl.col('date_id').add(1),
             ).rename(
                 {f"responder_{idx}": f"responder_{idx}_lag_1" for idx in range(9)}
-            ).group_by(['date_id', 'symbol_id'], maintain_order=True).last()
-
+            ).group_by(['date_id', 'symbol_id'], maintain_order=True)\
+            .last()
             df = df.join(lags, on=['date_id', 'symbol_id'], how='left', maintain_order='left')
+                    
         
         return df
 

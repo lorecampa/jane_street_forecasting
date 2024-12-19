@@ -164,21 +164,18 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
-        data_args = {}
+        data_args = {'include_lags': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
-        
-        
-        train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
+        print(f'Loading data from {data_dir}...')
+        train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)        
         self.train_data = self.loader._build_splits(train_df)
         self.val_data = self.loader._build_splits(val_df)
+        print(f'Using features: {self.loader.features}')
+                
+        print(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
         
-        
-        print(f'X_train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
-        
-        
-
         self.model_args = {}
         if model_type == 'lgbm':
             self.model_args.update({'verbose': -1})
