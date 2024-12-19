@@ -164,7 +164,7 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
-        data_args = {'include_lags': True}
+        data_args = {}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
