@@ -91,7 +91,7 @@ class DataLoader:
         
     def load(self, start_dt: int, end_dt: int = None) -> pl.LazyFrame:
         df = self._load().filter(
-            pl.col('date_id').gt(start_dt)
+            pl.col('date_id').ge(start_dt)
         )
         if end_dt is not None:
             df = df.filter(
