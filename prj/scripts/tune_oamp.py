@@ -12,14 +12,14 @@ from prj.agents.AgentTreeRegressor import TREE_NAME_MODEL_CLASS_DICT
 from prj.agents.factory import AgentsFactory
 from prj.config import DATA_DIR, EXP_DIR
 from prj.data import DATA_ARGS_CONFIG
-from prj.data.data_loader import DataLoader
+from prj.data.data_loader import DataLoader, DataConfig
 from prj.hyperparameters_opt import SAMPLER
 from prj.logger import setup_logger
 from prj.metrics import absolute_weighted_error_loss_fn, weighted_mae, weighted_rmse, weighted_r2, weighted_mse, squared_weighted_error_loss_fn, log_cosh_weighted_loss_fn
 from prj.oamp.oamp import OAMP
 from prj.oamp.oamp_config import ConfigOAMP
 from prj.tuner import Tuner
-from prj.utils import str_to_dict_arg
+from prj.utils import save_dict_to_json, str_to_dict_arg
 import numpy as np
 
 
@@ -121,18 +121,21 @@ class TunerOamp(Tuner):
         self.start_partition = start_partition
         self.end_partition = end_partition
         
-        agent_base_dir = EXP_DIR / 'saved'
+        agent_base_dir = EXP_DIR / 'saved' / 'oamp'
         self.agents_dict = [
-            {'agent_type': 'lgbm', 'load_path': os.path.join(agent_base_dir, "LGBMRegressor_1seeds_4_5-6_6_134802", "best_trial", "saved_model")},
-            {'agent_type': 'lgbm', 'load_path': os.path.join(agent_base_dir, "LGBMRegressor_1seeds_5_6-7_7_134811", "best_trial", "saved_model")},
-            {'agent_type': 'lgbm', 'load_path': os.path.join(agent_base_dir, "LGBMRegressor_1seeds_6_7-8_8_134900", "best_trial", "saved_model")},
+            {'agent_type': 'lgbm', 'load_path': os.path.join(agent_base_dir, "lgbm_1seeds_1020_1529-0.2_20241218_104118", "train", "model")},
+            {'agent_type': 'catboost', 'load_path': os.path.join(agent_base_dir, "catboost_1seeds_1020_1529-0.2_20241218_104022", "train", "model")},
+            {'agent_type': 'xgb', 'load_path': os.path.join(agent_base_dir, "xgb_1seeds_1020_1529-0.2_20241218_104101", "train", "model")},
         ]
         self.agents = [AgentsFactory.load_agent(agent_dict) for agent_dict in self.agents_dict]
         
+        data_args = {}
+        config = DataConfig(**data_args)
+        self.loader = DataLoader(data_dir=self.data_dir, config=config)
+            
+        df = self.loader.load_with_partition(self.start_partition, self.end_partition)
+        X, self.y, self.w, info = self.loader._build_splits(df)
         
-        data_args = DATA_ARGS_CONFIG[self.model_type]
-        self.loader = DataLoader(data_dir=self.data_dir, data_args=data_args)
-        X, self.y, self.w, info = self.loader.load_partitions(self.start_partition, self.end_partition)
         
         # f = 100000
         # X = X[:f]
@@ -144,7 +147,15 @@ class TunerOamp(Tuner):
         self.times = info[:, 1]
         print(f"Loaded partition {self.start_partition}-{self.end_partition} with n = {pl.Series(self.dates).unique().len()} days")
         self.symbols = info[:, 2]
+        self.agent_types = [agent.agent_type for agent in self.agents]
         self.agent_predictions = np.concatenate([agent.predict(X).reshape(-1, 1) for agent in tqdm(self.agents)], axis=1)
+            
+        single_agent_metrics = [
+            TunerOamp.metrics(y_true=self.y, y_pred=self.agent_predictions[:, i], weights=self.w)
+            for i in range(self.agent_predictions.shape[1])
+        ]
+        single_agent_metrics = dict(zip(self.agent_types, single_agent_metrics))
+        save_dict_to_json(single_agent_metrics, os.path.join(out_dir, 'single_agent_metrics.json'))
         
         self.losses_dict = {
             'mae': absolute_weighted_error_loss_fn,
@@ -178,9 +189,7 @@ class TunerOamp(Tuner):
         for i in tqdm(range(self.agent_predictions.shape[0])):
             is_new_day = i > 0 and self.dates[i] != self.dates[i-1]
             if is_new_day:
-                # print(f'New day {self.dates[i]}, doing steps of previous day')
                 for j in range(last_day_start_idx, i):
-                    # is_new_group = j > last_day_start_idx and self.times[j] != self.times[j-1]
                     is_new_group = (j == (i - 1))
                     self.model.step(agent_losses[j], is_new_group=is_new_group)
                 last_day_start_idx = i

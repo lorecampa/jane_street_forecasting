@@ -83,6 +83,11 @@ class DataLoader:
     def load_numpy(self, start_dt: int, end_dt: int = None):
         df = self.load(start_dt, end_dt)
         return self._build_splits(df)
+    
+    def load_with_partition(self, start_part_id: int, end_part_id: int = None):
+        start_dt = PARTITIONS_DATE_INFO[start_part_id]['min_date']
+        end_dt = PARTITIONS_DATE_INFO[end_part_id]['max_date'] if end_part_id is not None else PARTITIONS_DATE_INFO[9]['max_date']
+        return self.load(start_dt, end_dt)
         
     def load(self, start_dt: int, end_dt: int = None) -> pl.LazyFrame:
         df = self._load().filter(
