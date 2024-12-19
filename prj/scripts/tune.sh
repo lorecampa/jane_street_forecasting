@@ -22,8 +22,8 @@ python prj/scripts/tune_neural.py \
 
 
 # Tree
-START_DT=1100
-END_DT=1200
+START_DT=850
+END_DT=1529
 
 python prj/scripts/tune_tree.py \
     --model lgbm \
