@@ -238,7 +238,7 @@ if __name__ == "__main__":
     study_name = args.study_name if args.study_name is not None else \
         f'{args.model}_{args.n_seeds}seeds_{args.start_dt}-{args.end_dt}-{timestamp}'
         
-    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / 'tmp' / str(args.model) / study_name)
+    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / str(args.model) / study_name)
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
     
     logger = setup_logger(out_dir)

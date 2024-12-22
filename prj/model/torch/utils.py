@@ -7,7 +7,6 @@ import lightning.pytorch.callbacks as C
 from prj.model.torch.callback import EpochStatsCallback
 
 
-
 def train(model: L.LightningModule,
           train_dataloader: DataLoader,
           val_dataloader: DataLoader,
@@ -25,12 +24,11 @@ def train(model: L.LightningModule,
           early_stopping_cfg: Dict[str, Any] = None,
           use_model_ckpt: bool = True,
           model_ckpt_cfg: Dict[str, Any] = None,
-          accelerator: str = 'auto',
           seed: int = 42,
+          accelerator: str = 'auto',
           compile: bool = False):
-    
     if compile:
-        model = torch.compile(model, fullgraph=True, dynamic=False)
+        model = torch.compile(model)
 
     L.seed_everything(seed, workers=True)
 
@@ -52,10 +50,11 @@ def train(model: L.LightningModule,
         accumulate_grad_batches=accumulate_grad_batches,
         gradient_clip_val=gradient_clip_val,
         gradient_clip_algorithm=gradient_clip_algorithm,
-        accelerator=accelerator,
-        callbacks=callbacks
+        callbacks=callbacks,
+        accelerator=accelerator
     )
     trainer.fit(model=model, train_dataloaders=train_dataloader,
                 val_dataloaders=val_dataloader, ckpt_path=checkpoint_path)
     return model
+
 

@@ -34,9 +34,26 @@ python prj/scripts/tune_neural_keras.py \
     --n_trials 100 \
     --n_seeds 1 \
     --verbose -1 \
+    --study_name mlp_1seeds_850-1529-20241219_173941 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --gpu
 
+
+
+# Tree
+START_DT=850
+END_DT=1529
+
+python prj/scripts/tune_tree.py \
+    --model catboost \
+    --start_dt $START_DT \
+    --end_dt $END_DT \
+    --val_ratio 0.2 \
+    --n_trials 300 \
+    --n_seeds 1 \
+    --study_name catboost_1seeds_850_1529-0.2_20241221_195517 \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --train
 
 
 # Tree
@@ -48,14 +65,28 @@ python prj/scripts/tune_tree.py \
     --start_dt $START_DT \
     --end_dt $END_DT \
     --val_ratio 0.2 \
-    --n_trials 100 \
+    --n_trials 300 \
     --n_seeds 1 \
-
-
-
-    --study_name catboost_1seeds_1020_1529-0.2_20241218_104022 \
+    --study_name lgbm_1seeds_850_1529-0.2_20241219_131622 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --train
+
+
+START_DT=850
+END_DT=1529
+
+python prj/scripts/tune_tree.py \
+    --model lgbm \
+    --start_dt $START_DT \
+    --end_dt $END_DT \
+    --val_ratio 0.2 \
+    --n_trials 300 \
+    --n_seeds 5 \
+    --study_name lgbm_1seeds_850_1529-0.2_20241219_131622 \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --train
+
+
 
 
 

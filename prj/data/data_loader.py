@@ -23,6 +23,7 @@ class DataConfig:
         self.include_lags = kwargs.get('include_lags', False)
         self.include_symbol_id = kwargs.get('include_symbol_id', False)
         self.include_time_id = kwargs.get('include_time_id', False)
+        self.include_intrastock_norm = kwargs.get('include_intrastock_norm', False)
         
             
 class DataLoader:
@@ -37,32 +38,23 @@ class DataLoader:
         self.data_dir = data_dir
         self.config = config
         
-        
         self.ffill = config.ffill
         self.zero_fill = config.zero_fill
-        
+    
         self.include_lags = config.include_lags
-        self.include_symbol_id = config.include_lags
+        self.include_symbol_id = config.include_symbol_id
         self.include_time_id = config.include_time_id
+        self.include_intrastock_norm = config.include_intrastock_norm
         
         self.target = "responder_6"
+        self.features = None
+                        
         
-        self.features = [f'feature_{i:02d}' for i in range(79)]
-        if self.include_symbol_id:
-            self.features.append('symbol_id')
-        if self.include_time_id:
-            self.features.append('time_id')
-        if self.include_lags:
-            self.features.extend([f"responder_{idx}_lag_1" for idx in range(9)])
-            
-        self.time_cols = ['date_id', 'time_id']
-        
-    
     def _build_splits(self, df: pl.LazyFrame):
         X = df.select(self.features).cast(pl.Float32).collect().to_numpy()
         y = df.select(self.target).cast(pl.Float32).collect().to_series().to_numpy()
         w = df.select('weight').cast(pl.Float32).collect().to_series().to_numpy()
-        info = df.select(self.time_cols + ['symbol_id']).collect().to_numpy()
+        info = df.select(['date_id', 'time_id', 'symbol_id']).collect().to_numpy()
         return X, y, w, info
     
     def load_train_and_val(self, start_dt: int, end_dt: None, val_ratio: float):
@@ -99,6 +91,38 @@ class DataLoader:
             pl.col('date_id').is_between(start_dt, end_dt, closed='both'),
         )
                 
+        return df
+    
+    def _load(self) -> pl.LazyFrame:
+        df = pl.scan_parquet(
+            self.data_dir
+        )
+        # preprocessing
+        lags = None
+        if self.include_lags:
+            lags = self._compute_lags(df)
+            
+        df = self._preprocess(df, lags)
+                        
+        return df
+    
+
+    def _preprocess(self, df: pl.LazyFrame, lags: pl.LazyFrame | None) -> pl.LazyFrame:
+        self.features = [f'feature_{i:02d}' for i in range(79)]
+        if self.include_symbol_id:
+            self.features.append('symbol_id')
+        if self.include_time_id:
+            self.features.append('time_id')
+        
+        if lags is not None:
+            df = self._include_lags(df, lags)
+        
+        if self.include_intrastock_norm:
+            df = self._include_intrastock_norm(df)
+            
+        return self._impute(df)
+    
+    def _impute(self, df: pl.LazyFrame) -> pl.LazyFrame:
         if self.ffill:
             df = df.with_columns(
                 pl.col(self.features).fill_nan(None).fill_null(strategy="forward", limit=10).over('symbol_id')
@@ -109,24 +133,44 @@ class DataLoader:
             )
         return df
     
-    def _load(self) -> pl.LazyFrame:
-        df = pl.scan_parquet(
-            self.data_dir
-        )
-        # preprocessing
-        if self.include_lags:
-            lags = df.select(
-                'date_id', 'symbol_id', *[f"responder_{idx}" for idx in range(9)]
-            ).with_columns(
-                pl.col('date_id').add(1),
-            ).rename(
-                {f"responder_{idx}": f"responder_{idx}_lag_1" for idx in range(9)}
-            ).group_by(['date_id', 'symbol_id'], maintain_order=True)\
-            .last()
-            df = df.join(lags, on=['date_id', 'symbol_id'], how='left', maintain_order='left')
-                    
+    
+    def _include_intrastock_norm(self, df: pl.LazyFrame) -> pl.LazyFrame:
+        MEAN_FEATURES = [0, 2, 3, 5, 6, 7, 18, 19, 34, 35, 36, 37, 38, 41, 43, 44, 48, 53, 55, 59, 62, 65, 68, 73, 74, 75, 76, 77, 78]
+        STD_FEATURES = [39, 42, 46, 53, 57, 66]
+        SKEW_FEATURES = [5, 40, 41, 42, 43, 44]
+        ZSCORE_FEATURES = [1, 36, 40, 45, 48, 49, 51, 52, 53, 54, 55, 59, 60]
+        
+        df = df.with_columns(
+            pl.col([f'feature_{j:02d}' for j in set(MEAN_FEATURES + ZSCORE_FEATURES)]).mean().over(['date_id', 'time_id']).name.suffix('_mean'),
+            pl.col([f'feature_{j:02d}' for j in set(STD_FEATURES + ZSCORE_FEATURES)]).std().over(['date_id', 'time_id']).name.suffix('_std'),
+            pl.col([f'feature_{j:02d}' for j in SKEW_FEATURES]).skew().over(['date_id', 'time_id']).name.suffix('_skew'),
+        ).with_columns(
+            pl.col(f'feature_{j:02d}').sub(f'feature_{j:02d}_mean').truediv(f'feature_{j:02d}_std').name.suffix('_zscore') for j in ZSCORE_FEATURES
+        ).drop([f'feature_{j:02d}_std' for j in ZSCORE_FEATURES if j not in STD_FEATURES] + \
+            [f'feature_{j:02d}_mean' for j in ZSCORE_FEATURES if j not in MEAN_FEATURES])
+
+        intrastock_features = [f'feature_{j:02d}_mean' for j in MEAN_FEATURES] + \
+            [f'feature_{j:02d}_std' for j in STD_FEATURES] + [f'feature_{j:02d}_skew' for j in SKEW_FEATURES] + \
+            [f'feature_{j:02d}_zscore' for j in ZSCORE_FEATURES]
+        self.features.extend(intrastock_features)
         
         return df
+    
+    def _compute_lags(self, df: pl.LazyFrame) -> pl.LazyFrame:
+        return df.select(
+            'date_id', 'symbol_id', *[f"responder_{idx}" for idx in range(9)]
+        ).with_columns(
+            pl.col('date_id').add(1),
+        ).rename(
+            {f"responder_{idx}": f"responder_{idx}_lag_1" for idx in range(9)}
+        ).group_by(['date_id', 'symbol_id'], maintain_order=True)\
+        .last()
+    
+    def _include_lags(self, lags: pl.LazyFrame) -> pl.LazyFrame:        
+        df = df.join(lags, on=['date_id', 'symbol_id'], how='left', maintain_order='left')
+        self.features.extend([f"responder_{idx}_lag_1" for idx in range(9)])
+        return df
+        
 
     def get_info(self) -> None:
         return {

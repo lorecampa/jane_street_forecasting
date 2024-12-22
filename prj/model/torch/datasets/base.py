@@ -89,35 +89,31 @@ class JaneStreetBaseDataset(Dataset):
     
     def __init__(self, 
                  dataset: pl.LazyFrame,
-                 features: list[str] = BASE_FEATURES):
+                 features: list[str] = BASE_FEATURES,
+                 device: str = 'cpu'):
         super(JaneStreetBaseDataset, self).__init__()   
         
         self.dataset = dataset
         self.features = features
+        self.device = device
         self.times_col = ['date_id', 'time_id']
-        self.dataset_len = self.dataset.select(['date_id', 'time_id', 'symbol_id']).unique().collect().shape[0]
         self._load()
-    
-    def _shuffle_batches(self):
-        np.random.shuffle(self.dates)
-    
+        
     def _load(self):
         preprocessed_dataset = (
             self.dataset \
             .select(self.times_col + self.features + ['responder_6', 'weight']) \
             .sort(self.times_col)
         )
-        self.X = preprocessed_dataset.select(self.features).cast(pl.Float32).collect().to_numpy()
-        self.y = preprocessed_dataset.select(['responder_6']).cast(pl.Float32).collect().to_numpy().flatten()
-        self.weights = preprocessed_dataset.select(['weight']).cast(pl.Float32).collect().to_numpy().flatten()
-        
+        self.X = torch.FloatTensor(preprocessed_dataset.select(self.features).cast(pl.Float32).collect().to_numpy()).to(self.device)
+        self.y = torch.FloatTensor(preprocessed_dataset.select(['responder_6']).cast(pl.Float32).collect().to_numpy().flatten()).to(self.device)
+        self.weights = torch.FloatTensor(preprocessed_dataset.select(['weight']).cast(pl.Float32).collect().to_numpy().flatten()).to(self.device)
+
         
     def __len__(self):
-        return self.dataset_len
+        return self.X.shape[0]
     
     def __getitem__(self, idx):       
-        return (
-            torch.tensor(self.X[idx, :], dtype=torch.float32), 
-            torch.tensor(self.y[idx], dtype=torch.float32), 
-            torch.tensor(self.weights[idx], dtype=torch.float32)
-        )
+        return self.X[idx], self.y[idx], self.weights[idx]
+        
+

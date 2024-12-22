@@ -164,7 +164,7 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
-        data_args = {}
+        data_args = {'include_intrastock_norm': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
@@ -172,13 +172,15 @@ class TreeTuner(Tuner):
         train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)        
         self.train_data = self.loader._build_splits(train_df)
         self.val_data = self.loader._build_splits(val_df)
-        print(f'Using features: {self.loader.features}')
+        print(f'Using features: {self.loader.features}. N features: {len(self.loader.features)}')
                 
         print(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
         
         self.model_args = {}
         if model_type == 'lgbm':
             self.model_args.update({'verbose': -1})
+        elif model_type == 'catboost':
+            self.model_args.update({'verbose': 50})
             
         self.learn_args = {}
             
@@ -203,16 +205,18 @@ if __name__ == "__main__":
 
     study_name = args.study_name if args.study_name is not None else \
         f'{args.model}_{args.n_seeds}seeds_{args.start_dt}_{args.end_dt}-{args.val_ratio}_{timestamp}'
-        
-    out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' /str(args.model) / study_name)
+    
+    val_ratio = args.val_ratio
+    if args.train:
+        out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'train' / str(args.model) / f'{study_name}_{timestamp}')
+        val_ratio = 0.
+    else:
+        out_dir = args.out_dir if args.out_dir is not None else str(EXP_DIR / 'tuning' / str(args.model) / study_name)
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
     
     logger = setup_logger(out_dir)
     logger.info(f'Tuning model: {args.model}')
     
-    val_ratio = args.val_ratio
-    if args.train:
-        val_ratio = 0.
 
     optimizer = TreeTuner(
         model_type=args.model,

@@ -133,7 +133,7 @@ class Tuner:
             val_metrics = self.evaluate()
             trial.set_user_attr("val_metrics", str(val_metrics))
             
-            if trial.number % 5 == 0 or trial.number == self.n_trials:
+            if trial.number > 0:
                 self._plot_optuna_results(trial)
             
             self.logger.info(f"Trial {trial.number} finished in {(time.time() - start_time)/60:.2f} minutes")
