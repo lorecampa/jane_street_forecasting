@@ -111,3 +111,10 @@ class JaneStreetModelWrapper(L.LightningModule):
                 'monitor': 'val_wr2',
             }
         }
+        
+    
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        self.model.eval()
+        X = torch.tensor(X, dtype=torch.float32)
+        with torch.no_grad():
+            return self.model(X).cpu().numpy().flatten()

@@ -3,6 +3,8 @@ import argparse
 import gc
 from logging import Logger
 import os
+
+import torch
 from prj.agents.AgentNeuralRegressor import NEURAL_NAME_MODEL_CLASS_DICT
 from prj.agents.factory import AgentsFactory
 from prj.config import DATA_DIR, EXP_DIR
@@ -163,6 +165,8 @@ class NeuralTuner(Tuner):
         self.start_dt = start_dt
         self.end_dt = end_dt
         self.val_ratio = val_ratio
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.es_ratio = 0.10
         print(f'Start date: {start_dt}, End date: {end_dt}, Val ratio: {val_ratio}, ES ratio: {self.es_ratio}')
         
@@ -200,7 +204,7 @@ class NeuralTuner(Tuner):
         self.val_ds = JaneStreetBaseDataset(val_ds, features=self.features)
         
         
-        batch_size = 1024
+        batch_size = 8192
         self.train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=self.num_workers)
         self.es_dataloader = None
         if self.early_stopping:
@@ -208,12 +212,12 @@ class NeuralTuner(Tuner):
             
             
         self.model_args = {
-            'input_dim': (len(self.loader.features),),
+            'input_features': (len(self.loader.features),),
             'output_dim': 1,
         }
         self.learn_args = {
             'max_epochs': 50,
-            'gradient_clip_val': 10,
+            'gradient_clip_val': 20,
             'precision': '32-true',
             'use_model_ckpt': False,
         }
@@ -226,15 +230,7 @@ class NeuralTuner(Tuner):
             model_args=model_args,
             learn_args=learn_args,
         )
-    
-    def evaluate(self):
-        return self.model.evaluate(
-            X=self.val_ds.X,
-            y=self.val_ds.y,
-            weights=self.val_ds.weights
-        )
-
-        
+            
         
                         
 if __name__ == "__main__":

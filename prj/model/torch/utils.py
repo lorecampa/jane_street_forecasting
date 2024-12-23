@@ -26,9 +26,11 @@ def train(model: L.LightningModule,
           model_ckpt_cfg: Dict[str, Any] = None,
           seed: int = 42,
           accelerator: str = 'auto',
-          compile: bool = False):
+          compile: bool = False,
+          compile_kwargs: Dict[str, Any] = {},
+    ):
     if compile:
-        model = torch.compile(model)
+        model = torch.compile(model, **compile_kwargs)
 
     L.seed_everything(seed, workers=True)
 

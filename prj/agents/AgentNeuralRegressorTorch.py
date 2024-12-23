@@ -14,7 +14,7 @@ NEURAL_NAME_MODEL_CLASS_DICT = {
     'mlp': Mlp,
 }
 
-class AgentNeuralRegressor(AgentRegressor):
+class AgentNeuralRegressorTorch(AgentRegressor):
     def __init__(
         self,
         agent_type: str,
@@ -34,8 +34,6 @@ class AgentNeuralRegressor(AgentRegressor):
             warnings.warn('Learning rate not provided, using default value')
             lr = 5e-4
         
-        scheduler = 'ReduceLROnPlateau'
-        scheduler_cfg = dict(mode='min', factor=0.1, patience=3, verbose=True, min_lr=1e-8)
         
         use_gaussian_noise = model_args.pop('use_gaussian_noise', False)
         gaussian_noise_std = model_args.pop('gaussian_noise_std', 0.1)
@@ -76,7 +74,7 @@ class AgentNeuralRegressor(AgentRegressor):
             'max_epochs': 50,
             'precision': '32-true',
             'use_model_ckpt': False,
-            'gradient_clip_val': 10,
+            'gradient_clip_val': 20,
         }
         defalut_learn_args.update(learn_args)
         
@@ -99,6 +97,7 @@ class AgentNeuralRegressor(AgentRegressor):
             self.agents.append(model)
             
         return self.agents
+    
         
             
     def save(self, path: str):

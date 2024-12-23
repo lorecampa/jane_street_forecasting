@@ -70,7 +70,11 @@ class DataLoader:
         df_val = df.filter(pl.col('date_id').ge(split_date))
         
         return df_train, df_val
-        
+    
+    def load_numpy_with_partition(self, start_part_id: int, end_part_id: int = None):
+        start_dt = PARTITIONS_DATE_INFO[start_part_id]['min_date']
+        end_dt = PARTITIONS_DATE_INFO[end_part_id]['max_date'] if end_part_id is not None else PARTITIONS_DATE_INFO[9]['max_date']
+        return self.load_numpy(start_dt, end_dt)
         
     def load_numpy(self, start_dt: int, end_dt: int = None):
         df = self.load(start_dt, end_dt)
@@ -94,9 +98,15 @@ class DataLoader:
         return df
     
     def _load(self) -> pl.LazyFrame:
+        data_path = Path(self.data_dir)
+        if self.ffill:
+            data_path = data_path / 'train_ffill.parquet'
+        else:
+            data_path = data_path / 'train.parquet'
+            
         df = pl.scan_parquet(
-            self.data_dir
-        )
+            data_path
+        ).sort('date_id', 'time_id')
         # preprocessing
         lags = None
         if self.include_lags:
@@ -114,22 +124,25 @@ class DataLoader:
         if self.include_time_id:
             self.features.append('time_id')
         
+        df = self._impute(df)
+        
         if lags is not None:
             df = self._include_lags(df, lags)
         
         if self.include_intrastock_norm:
             df = self._include_intrastock_norm(df)
             
-        return self._impute(df)
+        return df
     
     def _impute(self, df: pl.LazyFrame) -> pl.LazyFrame:
-        if self.ffill:
-            df = df.with_columns(
-                pl.col(self.features).fill_nan(None).fill_null(strategy="forward", limit=10).over('symbol_id')
-            )
+        impute_cols = [col for col in self.features if col not in ['symbol_id', 'time_id', 'date_id']]
+        # if self.ffill:
+        #     df = df.with_columns(
+        #         pl.col(impute_cols).fill_nan(None).fill_null(strategy="forward", limit=10).over('symbol_id')
+        #     )
         if self.zero_fill:
             df = df.with_columns(
-                pl.col(self.features).fill_nan(None).fill_null(strategy="zero")
+                pl.col(impute_cols).fill_nan(None).fill_null(strategy="zero")
             )
         return df
     

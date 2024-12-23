@@ -15,4 +15,4 @@ data_dir_env = os.getenv('DATA_DIR')
 if data_dir_env:
     DATA_DIR = Path(data_dir_env)
 else:
-    DATA_DIR = ROOT_DIR / 'dataset' / 'train.parquet'
+    DATA_DIR = ROOT_DIR / 'dataset'

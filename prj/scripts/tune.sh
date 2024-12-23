@@ -67,7 +67,6 @@ python prj/scripts/tune_tree.py \
     --val_ratio 0.2 \
     --n_trials 300 \
     --n_seeds 1 \
-    --study_name lgbm_1seeds_850_1529-0.2_20241219_131622 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --train
 
