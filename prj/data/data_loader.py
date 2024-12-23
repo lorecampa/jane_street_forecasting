@@ -123,15 +123,16 @@ class DataLoader:
             self.features.append('symbol_id')
         if self.include_time_id:
             self.features.append('time_id')
-        
-        df = self._impute(df)
-        
+                
         if lags is not None:
             df = self._include_lags(df, lags)
         
         if self.include_intrastock_norm:
             df = self._include_intrastock_norm(df)
             
+        
+        df = self._impute(df)
+    
         return df
     
     def _impute(self, df: pl.LazyFrame) -> pl.LazyFrame:
