@@ -14,10 +14,11 @@ import lightning as L
 import lightning.pytorch.callbacks as C
 
 
-class JaneStreetMultiStockDataset(Dataset):
+class JaneStreetMultiStockGraphDataset(Dataset):
     
-    def __init__(self, dataset: pl.LazyFrame, num_days_batch: int = 10, num_stocks: int = 39):
+    def __init__(self, dataset: pl.LazyFrame, adjacency_matrices: np.ndarray, num_stocks: int = 39):
         self.dataset = dataset
+        self.adjacency_matrices = adjacency_matrices
         self.num_stocks = num_stocks
         self.dataset_len = self.dataset.select(['date_id', 'time_id']).unique().collect().shape[0]
         self._load()
@@ -58,11 +59,15 @@ class JaneStreetMultiStockDataset(Dataset):
         masks = self.masks[start_row:start_row+self.num_stocks]
         weights = self.weights[start_row:start_row+self.num_stocks]
         symbols = self.s[start_row:start_row+self.num_stocks]
+
+        date_id = self.date_ids[start_row]
+        adj_matrix = self.adjacency_matrices[date_id]
         
         return (
             torch.tensor(features), 
             torch.tensor(targets), 
             torch.tensor(masks), 
             torch.tensor(weights), 
-            torch.tensor(symbols)
+            torch.tensor(symbols),
+            torch.tensor(adj_matrix, dtype=torch.int)
         )
