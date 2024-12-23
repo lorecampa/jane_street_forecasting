@@ -21,12 +21,13 @@ class StockGCNModel(nn.Module):
 
         self.use_embeddings = use_embeddings
 
-        self.feature_projector = [
+        self.init_layers = nn.Sequential(
             TransposeLayer(),
             nn.BatchNorm1d(input_features),
             TransposeLayer(),
             nn.Dropout(dropout_rate),
-        ]
+        )
+        self.feature_projector = []
         if use_embeddings:
             self.feature_projector.append(nn.Linear(input_features + embedding_dim, hidden_dim))
             self.embedding_layer = nn.Embedding(num_stocks, embedding_dim)
@@ -60,6 +61,7 @@ class StockGCNModel(nn.Module):
     def forward(self, x, symbols, adj):
         batch_size, num_stocks, num_features = x.size()
 
+        x = self.init_layers(x)
         if self.use_embeddings:
             stock_embeddings = self.embedding_layer(symbols)
             x = torch.cat([x, stock_embeddings], dim=-1)

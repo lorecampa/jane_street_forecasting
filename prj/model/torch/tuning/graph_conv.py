@@ -2,9 +2,9 @@ import sys
 sys.path.append('/home/it4i-carlos00/jane_street_forecasting/prj/model/torch')
 sys.path.append('/home/it4i-carlos00/jane_street_forecasting')
 
-from wrappers import JaneStreetMultiStockModel
-from datasets import JaneStreetMultiStockDataset
-from models import StockAttentionModel
+from wrappers import JaneStreetMultiStockGraphModel
+from datasets import JaneStreetMultiStockGraphDataset
+from models import StockGCNModel
 from metrics import weighted_r2_score
 from losses import WeightedMSELoss
 from utils import train
@@ -29,30 +29,21 @@ LOGGING_FORMATTER = "%(asctime)s:%(name)s:%(levelname)s: %(message)s"
 def optimize_parameters(output_dir, train_dataset, val_dataset, study_name, n_trials, storage, 
                         n_gpu, n_gpu_per_trial, num_workers_per_dataloader):   
     def obj_function(trial):
-        num_projection_layers = trial.suggest_int("num_projection_layers", 1, 4)
-        num_heads = trial.suggest_int("num_heads", 1, 8)
-        final_hidden_dims = num_heads * trial.suggest_int("final_hidden_dims_ratio", 16, 128, step=16)
-        hidden_dims = [final_hidden_dims]
         
         batch_size = trial.suggest_categorical("batch_size", [128, 256, 512, 1024, 2048])
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers_per_dataloader)
         val_dataloader = DataLoader(val_dataset, batch_size=1024, shuffle=False, num_workers=num_workers_per_dataloader)
-        
-        if num_projection_layers > 1:
-            hidden_dims_decay = trial.suggest_categorical("hidden_dims_decay", [1, 2, 3])
-            for _ in range(num_projection_layers - 1):
-                hidden_dims = [hidden_dims[-1] * hidden_dims_decay] + hidden_dims
         
         use_embeddings = trial.suggest_categorical("use_embeddings", [True, False]) 
         num_layers = trial.suggest_int("num_layers", 1, 12)
         dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5)
         embedding_dim = trial.suggest_categorical("embedding_dim", [16, 32, 64, 128]) if use_embeddings else 0
         dim_feedforward_mult = trial.suggest_categorical("dim_feedforward_mult", [2, 3, 4])
-        base_model = StockAttentionModel(
+        hidden_dim = trial.suggest_int("hidden_dim", 64, 512, step=8)
+        base_model = StockGCNModel(
             input_features=79,
             output_dim=1,
-            hidden_dims=hidden_dims,
-            num_heads=num_heads,
+            hidden_dim=hidden_dim,
             num_layers=num_layers,
             dropout_rate=dropout_rate,
             use_embeddings=use_embeddings,
@@ -63,7 +54,7 @@ def optimize_parameters(output_dir, train_dataset, val_dataset, study_name, n_tr
         optimizer_cfg = dict(lr=trial.suggest_float("lr", 1e-4, 1e-3, step=1e-4))
         scheduler = 'ReduceLROnPlateau'
         scheduler_cfg = dict(mode='max', factor=0.1, patience=5, verbose=True, min_lr=1e-5)
-        model = JaneStreetMultiStockModel(
+        model = JaneStreetMultiStockGraphModel(
             base_model, 
             losses=[WeightedMSELoss()], 
             loss_weights=[1], 
@@ -91,17 +82,16 @@ def optimize_parameters(output_dir, train_dataset, val_dataset, study_name, n_tr
         gc.collect()
         
         val_dataloader = DataLoader(val_dataset, batch_size=1024, shuffle=False, num_workers=num_workers_per_dataloader)
-        base_model = StockAttentionModel(
+        base_model = StockGCNModel(
             input_features=79,
             output_dim=1,
-            hidden_dims=hidden_dims,
-            num_heads=num_heads,
+            hidden_dim=hidden_dim,
             num_layers=num_layers,
             dropout_rate=dropout_rate,
             use_embeddings=use_embeddings,
             embedding_dim=embedding_dim,
             dim_feedforward_mult=dim_feedforward_mult)
-        model = JaneStreetMultiStockModel.load_from_checkpoint(
+        model = JaneStreetMultiStockGraphModel.load_from_checkpoint(
             best_model_path, 
             model=base_model,
             losses=[WeightedMSELoss()],
@@ -141,9 +131,10 @@ def main(dataset_path, output_dir, study_name, n_trials, storage, n_gpu, n_gpu_p
         for i in range(6, 9)
     ])
     val_ds = pl.scan_parquet(dataset_path / 'partition_id=9' / 'part-0.parquet')
+    adj_matrices = np.load(dataset_path / 'adjacency_matrices.npy')
     
-    train_dataset = JaneStreetMultiStockDataset(train_ds)
-    val_dataset = JaneStreetMultiStockDataset(val_ds)
+    train_dataset = JaneStreetMultiStockGraphDataset(train_ds, adj_matrices)
+    val_dataset = JaneStreetMultiStockGraphDataset(val_ds, adj_matrices)
     
     optuna.logging.enable_propagation()  # Propagate logs to the root logger
     optuna.logging.disable_default_handler() # Stop showing logs in sys.stderr (prevents double logs)
