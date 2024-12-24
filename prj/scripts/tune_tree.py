@@ -164,12 +164,13 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
-        data_args = {'include_intrastock_norm': True}
+        data_args = {'include_intrastock_norm_temporal': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
         print(f'Loading data from {data_dir} with config args {data_args}...')
-        train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)        
+        train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
+            
         self.train_data = self.loader._build_splits(train_df)
         self.val_data = self.loader._build_splits(val_df)
         print(f'Using features: {self.loader.features}. N features: {len(self.loader.features)}')
@@ -177,12 +178,26 @@ class TreeTuner(Tuner):
         print(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
         
         self.model_args = {}
-        if model_type == 'lgbm':
-            self.model_args.update({'verbose': -1})
-        elif model_type == 'catboost':
-            self.model_args.update({'verbose': 50})
-            
         self.learn_args = {}
+
+        cat_features_idx = [self.loader.features.index(f) for f in self.loader.categorical_features]
+        if model_type == 'lgbm':
+            self.model_args['verbose'] = -1
+            if len(cat_features_idx) > 0:
+                self.learn_args['categorical_feature'] = ','.join([str(c) for c in cat_features_idx])  
+        elif model_type == 'catboost':
+            self.model_args['verbose'] = 50
+            if len(cat_features_idx) > 0:
+                self.model_args.update({
+                    'cat_features': cat_features_idx,
+                })
+        elif model_type == 'xgb':
+            if len(cat_features_idx) > 0:
+                self.model_args.update({
+                    'enable_categorical': True,
+                    'categorical_feature': cat_features_idx
+                })
+                
             
     
     def train(self, model_args:dict, learn_args: dict):

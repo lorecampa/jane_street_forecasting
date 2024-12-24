@@ -192,14 +192,14 @@ def get_null_count(df: pl.DataFrame):
     )
     
 
-def interquartile_mean(data: np.ndarray, q_min: int = 25, q_max: int = 75) -> float:
+def interquartile_mean(data: np.ndarray, q_min: int = 25, q_max: int = 75, axis=0) -> float:
     assert data.ndim == 1, "Input data must be 1D"
-    sorted_data = np.sort(data)
+    sorted_data = np.sort(data, axis=axis)
     
-    q_min = np.percentile(sorted_data, q_min)
-    q_max = np.percentile(sorted_data, q_max)
+    q_min = np.percentile(sorted_data, q_min, axis=axis)
+    q_max = np.percentile(sorted_data, q_max, axis=axis)
     filtered_data = sorted_data[(sorted_data >= q_min) & (sorted_data <= q_max)]    
-    iqm = np.mean(filtered_data)
+    iqm = np.mean(filtered_data, axis=0)
     return iqm
 
 def str_to_dict_arg(string):
@@ -209,3 +209,8 @@ def str_to_dict_arg(string):
         raise argparse.ArgumentTypeError(f"Invalid dictionary string: {string}") from e
     
 
+def wrapper_pbar(pbar, func):
+    def foo(*args, **kwargs):
+        pbar.update(1)
+        return func(*args, **kwargs)
+    return foo
