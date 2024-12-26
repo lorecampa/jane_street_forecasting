@@ -100,7 +100,7 @@ class DataLoader:
     def load(self, start_dt: int, end_dt: int = None) -> pl.LazyFrame:
         assert start_dt >= PARTITIONS_DATE_INFO[0]['min_date'] and start_dt <= PARTITIONS_DATE_INFO[9]['max_date'], 'start_dt out of range'
         assert end_dt is None or (end_dt >= PARTITIONS_DATE_INFO[0]['min_date'] and end_dt <= PARTITIONS_DATE_INFO[9]['max_date']), 'end_dt out of range'
-        assert start_dt <= end_dt, 'start_dt must be less than or equal end_dt'
+        assert end_dt is None or start_dt <= end_dt, 'start_dt must be less than or equal end_dt'
         
         end_dt = end_dt if end_dt is not None else PARTITIONS_DATE_INFO[9]['max_date']
         df = self._load(max(0, start_dt - self.window_period), end_dt).filter(

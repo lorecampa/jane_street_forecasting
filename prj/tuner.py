@@ -98,15 +98,23 @@ class Tuner:
     
 
     def train_best_trial(self):
+        start_time = time.time()
         best_trial = self.study.best_trial
         model_args = self.model_args.copy()
         model_args.update(self.custom_model_args)
-        model_args.update(SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args))
+        best_params = SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args)
+        print(f'Best params: {best_params}')
+        model_args.update(best_params)
                 
         learn_args = self.learn_args.copy()
         learn_args.update(self.custom_learn_args)
         
         self.train(model_args=model_args, learn_args=learn_args) 
+        self.logger.info(f"Train finished in {(time.time() - start_time)/60:.2f} minutes")
+        
+        if self.val_data.shape[0] > 0:
+            val_metrics = self.evaluate()
+            self.logger.info(f"Validation metrics: {val_metrics}")
         
     def _setup_directories(self):
         self.optuna_dir = f'{self.out_dir}/optuna'

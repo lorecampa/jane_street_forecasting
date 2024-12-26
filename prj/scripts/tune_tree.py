@@ -164,18 +164,33 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
-        data_args = {'include_intrastock_norm_temporal': True}
+        data_args = {'include_intrastock_norm_temporal': False}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
         print(f'Loading data from {data_dir} with config args {data_args}...')
-        train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
+        # train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
+        complete_df = self.loader.load(self.start_dt)
+        train_df = complete_df.filter(pl.col('date_id').lt(PARTITIONS_DATE_INFO[9]['min_date']))
+        val_df = complete_df.filter(pl.col('date_id').ge(PARTITIONS_DATE_INFO[9]['min_date']))
+
+        min_train_date = train_df.select('date_id').min().collect().item()
+        max_train_date = train_df.select('date_id').max().collect().item()
+        min_val_date = val_df.select('date_id').min().collect().item()
+        max_val_date = val_df.select('date_id').max().collect().item()
+        print(f'Train date range: {min_train_date} - {max_train_date}, Val date range: {min_val_date} - {max_val_date}')
+        n_dates_train = train_df.select('date_id').collect().n_unique()
+        n_dates_val = val_df.select('date_id').collect().n_unique()
+        print(f'N dates train: {n_dates_train}, N dates val: {n_dates_val}')
             
         self.train_data = self.loader._build_splits(train_df)
         self.val_data = self.loader._build_splits(val_df)
         print(f'Using features: {self.loader.features}. N features: {len(self.loader.features)}')
                 
         print(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
+
+        
+        
         
         self.model_args = {}
         self.learn_args = {}
