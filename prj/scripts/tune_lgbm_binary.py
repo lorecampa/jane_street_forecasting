@@ -8,7 +8,7 @@ from prj.agents.AgentTreeRegressor import TREE_NAME_MODEL_CLASS_DICT
 from prj.agents.factory import AgentsFactory
 from prj.config import DATA_DIR, EXP_DIR
 from prj.data import DATA_ARGS_CONFIG
-from prj.data.data_loader import DataLoader
+from prj.data.data_loader import DataConfig, DataLoader
 from prj.hyperparameters_opt import SAMPLER
 from prj.logger import setup_logger
 from prj.tuner import Tuner
@@ -133,18 +133,23 @@ class TunerLGBMBinary(Tuner):
       
         self.model_args = {'verbose': self.verbose}
         self.learn_args = {}
-        self.sampler_args = {'max_bin': 128, 'use_gpu': self.use_gpu}
-        
-        binary_path_train = str(DATA_DIR.parent / f'binary/lgbm/lgbm_maxbin_128_5_9.bin')
+        max_bin = 305
+        self.sampler_args = {'max_bin': max_bin, 'use_gpu': self.use_gpu}
+        binary_path_train = '/home/lorecampa/projects/jane_street_forecasting/dataset/binary/lgbm_base_features/lgbm_maxbin_305_0_8.bin'
+                
         print(f"Loading binary file: {binary_path_train}")
-        self.start_val_partition, self.end_val_partition = 9, 9
 
         self.train_data = lgb.Dataset(data=binary_path_train, params={
             'feature_pre_filter': False, 
             'device': 'gpu' if self.use_gpu else 'cpu'
         })
-        # self.loader = DataLoader(data_dir=self.data_dir, **data_args)
-        # self.val_data = self.loader.load_partitions(self.start_val_partition, self.end_val_partition)
+        
+        data_args = {}
+        config = DataConfig(**data_args)
+        self.loader = DataLoader(data_dir=data_dir, config=config)
+        val_ds = self.loader.load_with_partition(9, 9)
+        self.val_data = self.loader._build_splits(val_ds)
+        
    
     def train(self, model_args:dict, learn_args: dict):
         self.model.train_native(

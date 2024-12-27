@@ -68,8 +68,10 @@ class DataLoader:
         w = df.select('weight').cast(pl.Float32).collect().to_series().to_numpy()
         info = df.select(['date_id', 'time_id', 'symbol_id']).collect().to_numpy()
         return X, y, w, info
-    
-    def load_train_and_val(self, start_dt: int, end_dt: None, val_ratio: float):
+                
+    def load_train_and_val(self, start_dt: int, end_dt = None, val_ratio: float = 0.1):
+        end_dt = end_dt if end_dt is not None else PARTITIONS_DATE_INFO[9]['max_date']
+        
         assert val_ratio >= 0 and val_ratio <= 1, 'val_ratio must be in (0, 1)'
         df = self.load(start_dt, end_dt)
         
@@ -125,7 +127,10 @@ class DataLoader:
         if self.include_symbol_id:
             self.features.append('symbol_id')
         if self.include_time_id:
-            self.features.append('time_id')
+            df = df.with_columns(
+                pl.col('time_id').truediv(pl.col('time_id').max().over('date_id', 'symbol_id')).alias('time_id_norm')
+            )
+            self.features.append('time_id_norm')
                 
         if self.include_lags:
             lags = self._compute_lags(df)

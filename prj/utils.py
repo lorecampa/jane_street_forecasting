@@ -12,6 +12,7 @@ import numpy as np
 import polars.selectors as cs
 import tensorflow as tf
 import torch as th
+from sklearn.model_selection import BaseCrossValidator
 
 
 
@@ -214,3 +215,55 @@ def wrapper_pbar(pbar, func):
         pbar.update(1)
         return func(*args, **kwargs)
     return foo
+
+
+class BlockingTimeSeriesSplit():
+    def __init__(self, n_splits:int, val_ratio:float = 0.2):
+        assert val_ratio > 0 and val_ratio < 1, "val_ratio must be in the range (0, 1)"
+        self.n_splits = n_splits
+        self.val_ratio = val_ratio
+    
+    def get_n_splits(self, groups):
+        return self.n_splits
+    
+    def split(self, X, y=None, groups=None):
+        n_samples = len(X)
+        k_fold_size = n_samples // self.n_splits
+        indices = np.arange(n_samples)
+    
+        margin = 0
+        for i in range(self.n_splits):
+            start = i * k_fold_size
+            stop = start + k_fold_size
+            mid = int((1-self.val_ratio) * (stop - start)) + start
+            yield indices[start: mid], indices[mid + margin: stop]
+
+
+class CombinatorialPurgedKFold(BaseCrossValidator):
+    def __init__(self, n_splits=5, purge_length=1):
+        self.n_splits = n_splits
+        self.purge_length = purge_length
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return self.n_splits
+
+    def split(self, X, y=None, groups=None):
+        n_samples = X.shape[0]
+        indices = np.arange(n_samples)
+
+        test_size = n_samples // self.n_splits
+        test_starts = [(i * test_size) for i in range(self.n_splits)]
+
+        for test_start in test_starts:
+            test_end = test_start + test_size
+            if test_end + self.purge_length >= n_samples:
+                continue  # Skip if purge length exceeds data boundaries
+
+            test_indices = indices[test_start:test_end]
+            train_indices = np.setdiff1d(indices, test_indices)
+            purge_start = max(0, test_start - self.purge_length)
+            purge_end = min(n_samples, test_end + self.purge_length)
+            purge_indices = np.arange(purge_start, purge_end)
+
+            train_indices = np.setdiff1d(train_indices, purge_indices)
+            yield train_indices, test_indices

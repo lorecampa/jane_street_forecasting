@@ -12,9 +12,9 @@ from prj.data.data_loader import PARTITIONS_DATE_INFO, DataConfig, DataLoader
 from prj.hyperparameters_opt import SAMPLER
 from prj.logger import setup_logger
 from prj.tuner import Tuner
-from prj.utils import str_to_dict_arg
+from prj.utils import BlockingTimeSeriesSplit, CombinatorialPurgedKFold, str_to_dict_arg
 import polars as pl
-
+import numpy as np
 
 def get_cli_args():
     """Create CLI parser and return parsed arguments"""
@@ -38,9 +38,14 @@ def get_cli_args():
         default=PARTITIONS_DATE_INFO[9],
     )
     parser.add_argument(
+        '--end_val_dt',
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
         '--val_ratio',
         type=float,
-        default=0.15,
+        default=None,
     )
     parser.add_argument(
         '--data_dir',
@@ -107,6 +112,11 @@ def get_cli_args():
         help="Run only training, no optimization"
     )
     parser.add_argument(
+        '--kcross',
+        action='store_true',
+        default=False,
+    )
+    parser.add_argument(
         '--gpu',
         action='store_true',
         default=False,
@@ -124,6 +134,7 @@ class TreeTuner(Tuner):
         data_dir: str = DATA_DIR,
         start_dt: int = PARTITIONS_DATE_INFO[5],
         end_dt: int = PARTITIONS_DATE_INFO[9],
+        end_val_dt: int = None,
         val_ratio: float = 0.15,
         out_dir: str = '.',
         n_seeds: int = None,
@@ -132,6 +143,7 @@ class TreeTuner(Tuner):
         study_name: str = None,
         n_trials: int = 50,
         verbose: int = 0,
+        kcross: bool = False,
         custom_model_args: dict = {},
         custom_learn_args: dict = {},
         custom_data_args: dict = {},
@@ -150,11 +162,13 @@ class TreeTuner(Tuner):
             custom_model_args=custom_model_args,
             custom_learn_args=custom_learn_args,
             custom_data_args=custom_data_args,
-            logger=logger
+            logger=logger,
+            kcross=kcross
         )
         
         self.start_dt = start_dt
         self.end_dt = end_dt
+        self.end_val_dt = end_val_dt
         self.val_ratio = val_ratio
         
         print(f'Using model: {model_type}, start_dt: {start_dt}, end_dt: {end_dt}, val_ratio: {val_ratio}')
@@ -164,16 +178,20 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
       
-        data_args = {'include_intrastock_norm_temporal': False}
+        data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
         print(f'Loading data from {data_dir} with config args {data_args}...')
         # train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
-        complete_df = self.loader.load(self.start_dt)
-        train_df = complete_df.filter(pl.col('date_id').lt(PARTITIONS_DATE_INFO[9]['min_date']))
-        val_df = complete_df.filter(pl.col('date_id').ge(PARTITIONS_DATE_INFO[9]['min_date']))
-
+        if self.end_val_dt is not None:
+            complete_df = self.loader.load(self.start_dt, self.end_val_dt)
+            train_df = complete_df.filter(pl.col('date_id').le(self.end_dt))
+            val_df = complete_df.filter(pl.col('date_id').gt(self.end_dt))
+        else:
+            train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
+            complete_df = pl.concat([train_df, val_df])
+    
         min_train_date = train_df.select('date_id').min().collect().item()
         max_train_date = train_df.select('date_id').max().collect().item()
         min_val_date = val_df.select('date_id').min().collect().item()
@@ -183,13 +201,15 @@ class TreeTuner(Tuner):
         n_dates_val = val_df.select('date_id').collect().n_unique()
         print(f'N dates train: {n_dates_train}, N dates val: {n_dates_val}')
             
-        self.train_data = self.loader._build_splits(train_df)
-        self.val_data = self.loader._build_splits(val_df)
+        n_rows_train = train_df.select(pl.len()).collect().item()
+        self.data = self.loader._build_splits(complete_df)
+        self.train_data = tuple(data[:n_rows_train] for data in self.data)
+        self.val_data = tuple(data[n_rows_train:] for data in self.data)
+        
         print(f'Using features: {self.loader.features}. N features: {len(self.loader.features)}')
                 
         print(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
 
-        
         
         
         self.model_args = {}
@@ -223,7 +243,49 @@ class TreeTuner(Tuner):
             model_args=model_args,
             learn_args=learn_args,
         )
-
+        val_metrics = self.model.evaluate(*self.val_data[:-1])
+        
+        return val_metrics
+        
+    def train_kcross(self, model_args:dict, learn_args: dict):
+        kcross_type = 'blocking' # 'comb  
+        n_splits = 3
+        X, y, w, info = self.data
+        if kcross_type == 'comb':
+            kf = CombinatorialPurgedKFold(n_splits=n_splits + 1)
+        elif kcross_type == 'blocking':
+         kf = BlockingTimeSeriesSplit(n_splits=n_splits)
+        else:
+            raise ValueError(f'Invalid kcross type: {kcross_type}')
+        
+        val_metrics = {}
+        for train_index, test_index in kf.split(X, y):
+            
+            X_k_train, X_k_test = X[train_index], X[test_index]
+            y_k_train, y_k_test = y[train_index], y[test_index]
+            w_k_train, w_k_test = w[train_index], w[test_index]
+            dates_k_train, dates_k_test = info[train_index][:, 0], info[test_index][:, 0]
+            print(dates_k_train, dates_k_test)   
+            # print(np.min(dates_k_train), np.max(dates_k_train), np.min(dates_k_test), np.max(dates_k_test))
+            
+            
+            self.model.train(
+                X_k_train, y_k_train, w_k_train,
+                model_args=model_args,
+                learn_args=learn_args,
+            )
+            
+            val_k_metrics = self.model.evaluate(X_k_test, y_k_test, w_k_test)
+            for k, v in val_k_metrics.items():
+                if k in val_metrics:
+                    val_metrics[k].append(v)
+                else:
+                    val_metrics[k] = [v]
+                    
+        return val_metrics
+            
+            
+            
                         
 if __name__ == "__main__":
     args = get_cli_args()
@@ -234,7 +296,8 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     study_name = args.study_name if args.study_name is not None else \
-        f'{args.model}_{args.n_seeds}seeds_{args.start_dt}_{args.end_dt}-{args.val_ratio}_{timestamp}'
+        f'{args.model}_{args.n_seeds}seeds_{args.start_dt}_{args.end_dt}-{(args.end_val_dt) if args.end_val_dt is not None else args.val_ratio}_{timestamp}'
+
     
     val_ratio = args.val_ratio
     if args.train:
@@ -252,6 +315,7 @@ if __name__ == "__main__":
         model_type=args.model,
         start_dt=args.start_dt,
         end_dt=args.end_dt,
+        end_val_dt=args.end_val_dt,
         val_ratio=val_ratio,
         data_dir=data_dir,
         out_dir=out_dir,
@@ -264,7 +328,8 @@ if __name__ == "__main__":
         custom_model_args=args.custom_model_args,
         custom_learn_args=args.custom_learn_args,
         custom_data_args=args.custom_data_args,
-        logger=logger
+        logger=logger,
+        kcross=args.kcross
     )
     optimizer.create_study()
 
