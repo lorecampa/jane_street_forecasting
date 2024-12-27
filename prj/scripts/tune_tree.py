@@ -259,13 +259,13 @@ class TreeTuner(Tuner):
             raise ValueError(f'Invalid kcross type: {kcross_type}')
         
         val_metrics = {}
-        for train_index, test_index in kf.split(X, y):
+        for i, (train_index, test_index) in enumerate(kf.split(X, y)):
             
             X_k_train, X_k_test = X[train_index], X[test_index]
             y_k_train, y_k_test = y[train_index], y[test_index]
             w_k_train, w_k_test = w[train_index], w[test_index]
             dates_k_train, dates_k_test = info[train_index][:, 0], info[test_index][:, 0]
-            print(dates_k_train, dates_k_test)   
+            print(np.unique(dates_k_train), np.unique(dates_k_test))   
             # print(np.min(dates_k_train), np.max(dates_k_train), np.min(dates_k_test), np.max(dates_k_test))
             
             
@@ -281,6 +281,7 @@ class TreeTuner(Tuner):
                     val_metrics[k].append(v)
                 else:
                     val_metrics[k] = [v]
+            print(f"Fold {i}: {val_k_metrics['r2_w']}")
                     
         return val_metrics
             
