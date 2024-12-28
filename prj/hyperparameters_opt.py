@@ -50,7 +50,8 @@ def sample_lgbm_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
 def sample_catboost_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     use_gpu = additional_args.get("use_gpu", False)
     params = {
-        "iterations": 1000,
+        "iterations": trial.suggest_int("iterations", 300, 1000, step=50),
+        # "iterations": 1000,
         "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
         "depth": trial.suggest_int("depth", 1, 10),
         'bootstrap_type': trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS']),
