@@ -88,11 +88,10 @@ python prj/scripts/tune_tree.py \
     --end_val_dt $END_VAL_DT \
     --n_trials 300 \
     --n_seeds 1 \
+    --study_name "catboost_1seeds_850_1529-1529_20241228_103751" \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --gpu \
-    --kcross \
-    --train
-
+    --kcross
 
 
 # Tree LGBM Binary

@@ -178,8 +178,8 @@ class TreeTuner(Tuner):
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
 
-        # data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
         data_args = {}
+        # data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
@@ -256,27 +256,41 @@ class TreeTuner(Tuner):
         
         val_metrics = {}
         for i, (train_index, test_index) in enumerate(kf.split(X, y)):
-            
-            X_k_train, X_k_test = X[train_index], X[test_index]
-            y_k_train, y_k_test = y[train_index], y[test_index]
-            w_k_train, w_k_test = w[train_index], w[test_index]
-            dates_k_train, dates_k_test = info[train_index][:, 0], info[test_index][:, 0]
-            # print(np.unique(dates_k_train), np.unique(dates_k_test))   
-            print(np.min(dates_k_train), np.max(dates_k_train), np.min(dates_k_test), np.max(dates_k_test))
+            if kcross_type == 'blocking':
+                # Do like that to avoid creating copy of memory in case of continuous indexes
+                min_train_idx, max_train_idx = train_index.min(), train_index.max()
+                min_test_idx, max_test_idx = test_index.min(), test_index.max()
+                X_k_train, X_k_test = X[min_train_idx:max_train_idx + 1], X[min_test_idx:max_test_idx + 1]
+                y_k_train, y_k_test = y[min_train_idx:max_train_idx + 1], y[min_test_idx:max_test_idx + 1]
+                w_k_train, w_k_test = w[min_train_idx:max_train_idx + 1], w[min_test_idx:max_test_idx + 1]
+                dates_k_train, dates_k_test = info[min_train_idx:max_train_idx + 1][:, 0], info[min_test_idx:max_test_idx + 1][:, 0]
+                print(f'Fold {i}: {min_train_idx} - {max_train_idx} - {min_test_idx} - {max_test_idx}')
+            else:
+                X_k_train, X_k_test = X[train_index], X[test_index]
+                y_k_train, y_k_test = y[train_index], y[test_index]
+                w_k_train, w_k_test = w[train_index], w[test_index]
+                dates_k_train, dates_k_test = info[train_index][:, 0], info[test_index][:, 0]
+
+            # print(np.unique(dates_k_train), np.unique(dates_k_test)) 
+            print(f'Fold {i}: {np.min(dates_k_train)} - {np.max(dates_k_train)} - {np.min(dates_k_test)} - {np.max(dates_k_test)}')  
             
             self.model.train(
                 X_k_train, y_k_train, w_k_train,
                 model_args=model_args,
                 learn_args=learn_args,
             )
-            
-            val_k_metrics = self.model.evaluate(X_k_test, y_k_test, w_k_test)
+            batch_size = X_k_test.shape[0] // 5
+            val_k_metrics = self.model.evaluate(X_k_test, y_k_test, w_k_test, batch_size=batch_size)
             for k, v in val_k_metrics.items():
                 if k in val_metrics:
                     val_metrics[k].append(v)
                 else:
                     val_metrics[k] = [v]
             print(f"Fold {i}: {val_k_metrics['r2_w']:.3f}")
+            
+            del X_k_train, X_k_test, y_k_train, y_k_test, w_k_train, w_k_test
+            gc.collect()
+
                     
         return val_metrics
             

@@ -35,22 +35,48 @@ class AgentRegressor(AgentBase):
     def save(self, path: str) -> None:
         pass
     
+    # def predict(self, X: np.ndarray, **kwargs) -> np.ndarray:
+    #     aggregate = kwargs.get('aggregate', 'mean')
+    #     preds = np.array([agent.predict(X).clip(-5, 5) for agent in self.agents])
+    #     if aggregate == 'mean':
+    #         return np.mean(preds, axis=0)
+    #     elif aggregate == 'median':
+    #         return np.median(preds, axis=0)
+    #     elif aggregate == 'iqm':
+    #         return interquartile_mean(preds, qmin=0.25, qmax=0.75)
+    #     elif aggregate == None:
+    #         return np.array(preds)
+    #     else:
+    #         raise ValueError(f"Unknown aggregation method: {aggregate}")
+        
     def predict(self, X: np.ndarray, **kwargs) -> np.ndarray:
         aggregate = kwargs.get('aggregate', 'mean')
-        preds = np.array([agent.predict(X).clip(-5, 5) for agent in self.agents])
+        batch_size = kwargs.get('batch_size', X.shape[0])
+        if batch_size is None:
+            batch_size = X.shape[0]
+        preds = []
+
+        for start_idx in range(0, X.shape[0], batch_size):
+            end_idx = start_idx + batch_size
+            X_batch = X[start_idx:end_idx]
+            batch_preds = np.array([agent.predict(X_batch).clip(-5, 5) for agent in self.agents])
+            preds.append(batch_preds)
+
+        preds = np.concatenate(preds, axis=1)
+
         if aggregate == 'mean':
             return np.mean(preds, axis=0)
         elif aggregate == 'median':
             return np.median(preds, axis=0)
         elif aggregate == 'iqm':
             return interquartile_mean(preds, qmin=0.25, qmax=0.75)
-        elif aggregate == None:
-            return np.array(preds)
+        elif aggregate is None:
+            return preds
         else:
             raise ValueError(f"Unknown aggregation method: {aggregate}")
     
-    def evaluate(self, X: np.ndarray, y: np.ndarray, weights: np.ndarray = None) -> float:
-        y_pred = self.predict(X)
+    def evaluate(self, X: np.ndarray, y: np.ndarray, weights: np.ndarray = None, batch_size: float = None) -> float:
+        y_pred = self.predict(X, batch_size=batch_size)
         return {
             'r2_w': weighted_r2(y, y_pred, weights=weights),
             'mae_w': weighted_mae(y, y_pred, weights=weights),
