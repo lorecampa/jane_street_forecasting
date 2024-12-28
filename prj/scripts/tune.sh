@@ -76,6 +76,25 @@ python prj/scripts/tune_tree.py \
     --kcross \
     --train
 
+
+START_DT=850
+END_DT=1529
+END_VAL_DT=1529
+
+python prj/scripts/tune_tree.py \
+    --model catboost \
+    --start_dt $START_DT \
+    --end_dt $END_DT \
+    --end_val_dt $END_VAL_DT \
+    --n_trials 300 \
+    --n_seeds 1 \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --gpu \
+    --kcross \
+    --train
+
+
+
 # Tree LGBM Binary
 python prj/scripts/tune_lgbm_binary.py \
     --model lgbm \

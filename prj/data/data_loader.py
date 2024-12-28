@@ -56,8 +56,8 @@ class DataLoader:
         self.include_knn_features = config.include_knn_features
         self.include_intrastock_norm_temporal = config.include_intrastock_norm_temporal
         
-        # self.categorical_features = ['feature_09', 'feature_10', 'feature_11']
-        self.categorical_features = []
+        self.categorical_features = ['feature_09', 'feature_10', 'feature_11']
+        # self.categorical_features = []
         self.target = "responder_6"
         self.features = None
         self.window_period = 7                    
@@ -334,6 +334,8 @@ class DataLoader:
                 df_corr_responder = pivot.select(cols).corr()
                 linked = linkage(df_corr_responder, method='ward')
                 cluster_labels = fcluster(linked, t=2.5, criterion='distance')
+                
+                
                 # print(stocks, cluster_labels)
                 res = res.with_columns(
                     pl.col('symbol_id').replace_strict(

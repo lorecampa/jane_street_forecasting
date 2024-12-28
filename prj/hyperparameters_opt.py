@@ -31,7 +31,7 @@ def sample_lgbm_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
             "min_child_weight": trial.suggest_float("min_child_weight", 1e-7, 1e-1, log=True),
             "min_child_samples": trial.suggest_int("min_child_samples", 10, 10000, log=True),
             "extra_trees": trial.suggest_categorical("extra_trees", [True, False]),
-            "device_type": "gpu" if use_gpu else "cpu",
+            "device": "gpu" if use_gpu else "cpu",
         }
     
     if use_gpu:
@@ -57,9 +57,7 @@ def sample_catboost_params(trial: optuna.Trial, additional_args: dict = {}) -> d
             'bootstrap_type': trial.suggest_categorical('bootstrap_type', ['Bernoulli', 'MVS']),
             'subsample': trial.suggest_float("subsample", 0.05, 0.7),
             'fold_permutation_block': trial.suggest_int('fold_permutation_block', 1, 100),
-            'border_count': trial.suggest_int('border_count', 8, 512, log=True),
-            # 'has_time': trial.suggest_categorical('has_time', [True, False]),
-            'cat_features': additional_args.get('cat_features', []),
+            'has_time': trial.suggest_categorical('has_time', [True, False]),
             'task_type': 'GPU' if use_gpu else 'CPU',
         }
         
@@ -89,6 +87,7 @@ def sample_catboost_params(trial: optuna.Trial, additional_args: dict = {}) -> d
     if use_gpu:     
         params['border_count'] = trial.suggest_int('border_count', 8, 254, log=True) # suggested to be small on GPU
     else:
+        params['border_count'] = trial.suggest_int('border_count', 8, 512, log=True)
         params['random_strength'] = trial.suggest_float('random_strength', 1e-6, 1e2, log=True)
     
     return params

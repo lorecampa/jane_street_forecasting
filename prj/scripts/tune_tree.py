@@ -177,8 +177,9 @@ class TreeTuner(Tuner):
         
         self.model_class = model_dict[self.model_type]
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
-      
-        data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
+
+        # data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
+        data_args = {}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
@@ -209,23 +210,18 @@ class TreeTuner(Tuner):
         print(f'Using features: {self.loader.features}. N features: {len(self.loader.features)}')
                 
         print(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
-
-        
         
         self.model_args = {}
         self.learn_args = {}
 
-        cat_features_idx = [self.loader.features.index(f) for f in self.loader.categorical_features]
+        # cat_features_idx = [self.loader.features.index(f) for f in self.loader.categorical_features]
+        cat_features_idx = []
         if model_type == 'lgbm':
             self.model_args['verbose'] = -1
             if len(cat_features_idx) > 0:
                 self.learn_args['categorical_feature'] = ','.join([str(c) for c in cat_features_idx])  
         elif model_type == 'catboost':
-            self.model_args['verbose'] = 50
-            if len(cat_features_idx) > 0:
-                self.model_args.update({
-                    'cat_features': cat_features_idx,
-                })
+            self.learn_args['verbose'] = 100
         elif model_type == 'xgb':
             if len(cat_features_idx) > 0:
                 self.model_args.update({
@@ -265,9 +261,8 @@ class TreeTuner(Tuner):
             y_k_train, y_k_test = y[train_index], y[test_index]
             w_k_train, w_k_test = w[train_index], w[test_index]
             dates_k_train, dates_k_test = info[train_index][:, 0], info[test_index][:, 0]
-            print(np.unique(dates_k_train), np.unique(dates_k_test))   
-            # print(np.min(dates_k_train), np.max(dates_k_train), np.min(dates_k_test), np.max(dates_k_test))
-            
+            # print(np.unique(dates_k_train), np.unique(dates_k_test))   
+            print(np.min(dates_k_train), np.max(dates_k_train), np.min(dates_k_test), np.max(dates_k_test))
             
             self.model.train(
                 X_k_train, y_k_train, w_k_train,
@@ -281,7 +276,7 @@ class TreeTuner(Tuner):
                     val_metrics[k].append(v)
                 else:
                     val_metrics[k] = [v]
-            print(f"Fold {i}: {val_k_metrics['r2_w']}")
+            print(f"Fold {i}: {val_k_metrics['r2_w']:.3f}")
                     
         return val_metrics
             
@@ -292,6 +287,8 @@ if __name__ == "__main__":
     args = get_cli_args()
     if not args.gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    else:
+        print('Using GPU!')
 
     data_dir = args.data_dir if args.data_dir is not None else DATA_DIR    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
