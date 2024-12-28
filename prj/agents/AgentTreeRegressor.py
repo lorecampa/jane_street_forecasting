@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import gc
 import os
 import typing
 import warnings
@@ -41,6 +42,8 @@ class AgentTreeRegressor(AgentRegressor):
               model_args: dict = {}, 
               learn_args: dict = {},
     ):
+        del self.agents
+        gc.collect()
         self.agents = []
         for seed in tqdm(self.seeds):
             set_random_seed(seed)

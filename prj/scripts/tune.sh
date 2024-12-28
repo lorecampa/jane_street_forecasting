@@ -78,7 +78,7 @@ python prj/scripts/tune_tree.py \
     --gpu
 
 
-START_DT=850
+START_DT=1020
 END_DT=1529
 END_VAL_DT=1698
 
@@ -89,8 +89,8 @@ python prj/scripts/tune_tree.py \
     --end_val_dt $END_VAL_DT \
     --n_trials 300 \
     --n_seeds 1 \
-    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --gpu \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --kcross
 
 
