@@ -50,13 +50,13 @@ class AgentTreeRegressor(AgentRegressor):
             if self.agent_type == 'lgbm':
                 callbacks = [log_evaluation(period=20)]
                 curr_agent = self.agent_class(**curr_model_args, random_state=seed)
-                curr_agent.fit(X, y, callbacks=callbacks, sample_weight=sample_weight, **curr_learn_args)
+                curr_agent.fit(X, y, callbacks=callbacks, **curr_learn_args)
             elif self.agent_type == 'xgb':
                 curr_agent = self.agent_class(**model_args, random_state=seed)   
-                curr_agent.fit(X, y, sample_weight=sample_weight, **learn_args)
+                curr_agent.fit(X, y, **learn_args)
             elif self.agent_type == 'catboost':
                 curr_agent = self.agent_class(**model_args, random_state=seed)
-                curr_agent.fit(X, y, sample_weight=sample_weight, **learn_args)
+                curr_agent.fit(X, y, **learn_args)
                 
             self.agents.append(curr_agent)
             

@@ -95,6 +95,7 @@ def sample_catboost_params(trial: optuna.Trial, additional_args: dict = {}) -> d
         
 def sample_xgb_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
     use_gpu = additional_args.get("use_gpu", False)
+    cat_features = additional_args.get("cat_features", None)
     params = {
         'n_estimators': trial.suggest_int('n_estimators', 100, 5000, log=True),
         'learning_rate': trial.suggest_float('learning_rate', 1e-3, 0.1, log=True),
@@ -108,9 +109,9 @@ def sample_xgb_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
         'min_child_weight': trial.suggest_float('min_child_weight', 1e-7, 10, log=True),
         'subsample': trial.suggest_float('subsample', 0.05, 0.5),
         'colsample_bytree': trial.suggest_float('colsample_bytree', 0.1, 0.8),
-        "enable_categorical": True, #TODO: should it be false?
+        "enable_categorical": False if cat_features is None else True,
         "device": "gpu" if use_gpu else "cpu",
-    }    
+    }
     return params
 
 def _sample_base_neural_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:

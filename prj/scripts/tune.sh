@@ -72,13 +72,14 @@ python prj/scripts/tune_tree.py \
     --end_val_dt $END_VAL_DT \
     --n_trials 300 \
     --n_seeds 1 \
+    --study_name lgbm_1seeds_850_1529-1529_20241228_131847 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --kcross \
-    --train
+    --gpu
 
 
 START_DT=850
-END_DT=1529
+END_DT=1359
 END_VAL_DT=1529
 
 python prj/scripts/tune_tree.py \
@@ -88,7 +89,38 @@ python prj/scripts/tune_tree.py \
     --end_val_dt $END_VAL_DT \
     --n_trials 300 \
     --n_seeds 1 \
-    --study_name "catboost_1seeds_850_1529-1529_20241228_103751" \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --gpu \
+    --kcross
+
+
+START_DT=850
+END_DT=1529
+END_VAL_DT=1529
+
+python prj/scripts/tune_tree.py \
+    --model xgb \
+    --start_dt $START_DT \
+    --end_dt $END_DT \
+    --end_val_dt $END_VAL_DT \
+    --n_trials 300 \
+    --n_seeds 1 \
+    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --gpu \
+    --kcross
+
+
+START_DT=850
+END_DT=1529
+END_VAL_DT=1529
+
+python prj/scripts/tune_tree.py \
+    --model lgbm \
+    --start_dt $START_DT \
+    --end_dt $END_DT \
+    --end_val_dt $END_VAL_DT \
+    --n_trials 300 \
+    --n_seeds 1 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --gpu \
     --kcross

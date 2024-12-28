@@ -180,7 +180,7 @@ class TreeTuner(Tuner):
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
 
         data_args = {}
-        # data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
+        data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
@@ -230,8 +230,6 @@ class TreeTuner(Tuner):
                     'categorical_feature': cat_features_idx
                 })
                 
-            
-    
     def train(self, model_args:dict, learn_args: dict):
         X, y, w, _ = self.train_data
             
@@ -240,7 +238,11 @@ class TreeTuner(Tuner):
             model_args=model_args,
             learn_args=learn_args,
         )
-        val_metrics = self.model.evaluate(*self.val_data[:-1])
+        X_val, y_val, w_val, _ = self.val_data
+        batch_size = None
+        if self.use_gpu:
+            batch_size = X_val.shape[0] // 5
+        val_metrics = self.model.evaluate(X_val, y_val, w_val, batch_size=batch_size)
         
         return val_metrics
         
@@ -280,7 +282,9 @@ class TreeTuner(Tuner):
                 learn_args=learn_args,
             )
             self.logger.info(f'Fold {i}: Evaluating...')
-            batch_size = X_k_test.shape[0] // 5
+            batch_size = None
+            if self.use_gpu:
+                batch_size = X_k_test.shape[0] // 5
             val_k_metrics = self.model.evaluate(X_k_test, y_k_test, w_k_test, batch_size=batch_size)
             for k, v in val_k_metrics.items():
                 if k in val_metrics:
