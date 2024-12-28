@@ -79,8 +79,8 @@ python prj/scripts/tune_tree.py \
 
 
 START_DT=850
-END_DT=1359
-END_VAL_DT=1529
+END_DT=1529
+END_VAL_DT=1698
 
 python prj/scripts/tune_tree.py \
     --model catboost \

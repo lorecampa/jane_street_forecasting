@@ -180,7 +180,7 @@ class TreeTuner(Tuner):
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
 
         data_args = {}
-        data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
+        # data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
