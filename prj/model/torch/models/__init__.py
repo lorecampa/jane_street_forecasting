@@ -5,3 +5,5 @@ from .graph_conv import StockGCNModel
 from .wide_deep import WideDeepModel
 from .deep_cross import DeepCrossModel
 from .stock_pointnet import StockPointNetModel
+from .tcn import TimeConvolutionsModel
+from .rnn import RecurrentModel

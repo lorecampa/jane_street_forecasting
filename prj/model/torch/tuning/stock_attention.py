@@ -18,6 +18,7 @@ import json
 import polars as pl
 from lightning.pytorch.accelerators import find_usable_cuda_devices
 from torch.utils.data import DataLoader
+from lightning.pytorch.loggers import CSVLogger
 import torch
 import numpy as np
 import gc
@@ -80,11 +81,12 @@ def optimize_parameters(output_dir, train_dataset, val_dataset, study_name, n_tr
         early_stopping = {'monitor': 'val_wr2', 'min_delta': 0.00, 'patience': 10, 'verbose': True, 'mode': 'max'}
         ckpt_config = {'dirpath': tmp_checkpoint_dir, 'filename': 'transformer-epoch={epoch:03d}-val_wr2={val_wr2:.6f}', 'save_top_k': 1,
                        'monitor': 'val_wr2', 'verbose': True, 'mode': 'max'}
+        logger = CSVLogger(os.path.join(output_dir, 'logs'), name=None, version=trial.number)
         model, best_model_path, best_epoch = train(model, train_dataloader, val_dataloader, max_epochs=100, precision='32-true', 
                                                    use_model_ckpt=True, gradient_clip_val=gradient_clip_val, use_early_stopping=True, 
                                                    early_stopping_cfg=early_stopping, model_ckpt_cfg=ckpt_config, model_name='transformer',
                                                    accumulate_grad_batches=accumulate_grad_batches, log_every_n_steps=100, return_best_epoch=True,
-                                                   accelerator='cuda', devices=find_usable_cuda_devices(n_gpu_per_trial)) # gpus must be in exclusive mode
+                                                   logger=logger, accelerator='cuda', devices=find_usable_cuda_devices(n_gpu_per_trial)) # gpus must be in exclusive mode
         trial.set_user_attr("epochs", best_epoch) 
         
         del model

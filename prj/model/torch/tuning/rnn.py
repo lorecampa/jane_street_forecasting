@@ -2,9 +2,9 @@ import sys
 sys.path.append('/home/it4i-carlos00/jane_street_forecasting/prj/model/torch')
 sys.path.append('/home/it4i-carlos00/jane_street_forecasting')
 
-from wrappers import JaneStreetMultiStockGraphModel
-from datasets import JaneStreetMultiStockGraphDataset
-from models import StockGCNModel
+from wrappers import JaneStreetBaseModel
+from datasets import JaneStreetMultiTimeDataset
+from models import RecurrentModel
 from metrics import weighted_r2_score
 from losses import WeightedMSELoss
 from utils import train
@@ -17,12 +17,13 @@ import logging
 import json
 import polars as pl
 from lightning.pytorch.accelerators import find_usable_cuda_devices
-from torch.utils.data import DataLoader
 from lightning.pytorch.loggers import CSVLogger
+from torch.utils.data import DataLoader
 import torch
 import numpy as np
 import gc
 from pathlib import Path
+from copy import copy
 
 LOGGING_FORMATTER = "%(asctime)s:%(name)s:%(levelname)s: %(message)s"
 
@@ -30,32 +31,44 @@ LOGGING_FORMATTER = "%(asctime)s:%(name)s:%(levelname)s: %(message)s"
 def optimize_parameters(output_dir, train_dataset, val_dataset, study_name, n_trials, storage, 
                         n_gpu, n_gpu_per_trial, num_workers_per_dataloader):   
     def obj_function(trial):
+        sequence_length = trial.suggest_int("sequence_length", 10, 200, step=10)
+        train_ds = copy(train_dataset)
+        train_ds.num_timesteps = sequence_length
+        val_ds = copy(val_dataset)
+        val_ds.num_timesteps = sequence_length
         
-        batch_size = trial.suggest_categorical("batch_size", [128, 256, 512, 1024, 2048])
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers_per_dataloader)
-        val_dataloader = DataLoader(val_dataset, batch_size=1024, shuffle=False, num_workers=num_workers_per_dataloader)
+        batch_size = trial.suggest_categorical("batch_size", [512, 1024, 2048, 4096, 8192])
+        train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers_per_dataloader)
+        val_dataloader = DataLoader(val_ds, batch_size=8192, shuffle=False, num_workers=num_workers_per_dataloader)
         
-        use_embeddings = trial.suggest_categorical("use_embeddings", [True, False]) 
-        num_layers = trial.suggest_int("num_layers", 1, 12)
+        num_layers = trial.suggest_int("num_layers", 1, 6)
+        hidden_dim = trial.suggest_int("hidden_dim", 16, 256, step=16)
+        kernel_size = trial.suggest_int("kernel_size", 2, 4)
         dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5)
-        embedding_dim = trial.suggest_categorical("embedding_dim", [16, 32, 64, 128]) if use_embeddings else 0
-        dim_feedforward_mult = trial.suggest_categorical("dim_feedforward_mult", [2, 3, 4])
-        hidden_dim = trial.suggest_int("hidden_dim", 64, 512, step=8)
-        base_model = StockGCNModel(
+        num_dilated_convs = trial.suggest_int("num_dilated_convs", 1, 6)
+        dilations = [2**i for i in range(num_dilated_convs)]
+        use_attention = trial.suggest_categorical("use_attention", [True, False])
+        if use_attention:
+            attention_heads = trial.suggest_categorical("attention_heads", [1, 2, 4])
+        else:
+            attention_heads = None
+        
+        base_model = RecurrentModel(
             input_features=79,
             output_dim=1,
-            hidden_dim=hidden_dim,
             num_layers=num_layers,
+            hidden_dim=hidden_dim,
+            kernel_size=kernel_size,
+            dilations=dilations,
             dropout_rate=dropout_rate,
-            use_embeddings=use_embeddings,
-            embedding_dim=embedding_dim,
-            dim_feedforward_mult=dim_feedforward_mult)
+            use_attention=use_attention,
+            attention_heads=attention_heads)
         
         optimizer = 'Adam'
         optimizer_cfg = dict(lr=trial.suggest_float("lr", 1e-4, 1e-3, step=1e-4))
         scheduler = 'ReduceLROnPlateau'
         scheduler_cfg = dict(mode='max', factor=0.1, patience=5, verbose=True, min_lr=1e-5)
-        model = JaneStreetMultiStockGraphModel(
+        model = JaneStreetBaseModel(
             base_model, 
             losses=[WeightedMSELoss()], 
             loss_weights=[1], 
@@ -67,33 +80,40 @@ def optimize_parameters(output_dir, train_dataset, val_dataset, study_name, n_tr
             optimizer_cfg=optimizer_cfg)
         
         accumulate_grad_batches = trial.suggest_int('accumulate_grad_batches', 1, 8)
-        gradient_clip_val = trial.suggest_float('gradient_clip_val', 0.1, 20, step=0.1)
+        gradient_clip_val = trial.suggest_float('gradient_clip_val', 0.1, 30, step=0.1)
         tmp_checkpoint_dir = os.path.join(output_dir, f'trial_{trial.number}')
         early_stopping = {'monitor': 'val_wr2', 'min_delta': 0.00, 'patience': 10, 'verbose': True, 'mode': 'max'}
-        ckpt_config = {'dirpath': tmp_checkpoint_dir, 'filename': 'transformer-epoch={epoch:03d}-val_wr2={val_wr2:.6f}', 'save_top_k': 1,
+        ckpt_config = {'dirpath': tmp_checkpoint_dir, 'filename': 'rnn-epoch={epoch:03d}-val_wr2={val_wr2:.6f}', 'save_top_k': 1,
                        'monitor': 'val_wr2', 'verbose': True, 'mode': 'max'}
+        use_swa = trial.suggest_categorical('use_swa', [True, False])
+        if use_swa:
+            swa_config = {'swa_lrs': trial.suggest_float('swa_lrs', 1e-3, 0.1, step=1e-3), 'swa_epoch_start': trial.suggest_int('swa_epoch_start', 5, 10)}
+        else:
+            swa_config = dict()
         logger = CSVLogger(os.path.join(output_dir, 'logs'), name=None, version=trial.number)
         model, best_model_path, best_epoch = train(model, train_dataloader, val_dataloader, max_epochs=100, precision='32-true', 
                                                    use_model_ckpt=True, gradient_clip_val=gradient_clip_val, use_early_stopping=True, 
-                                                   early_stopping_cfg=early_stopping, model_ckpt_cfg=ckpt_config, model_name='transformer',
+                                                   early_stopping_cfg=early_stopping, model_ckpt_cfg=ckpt_config, model_name='rnn',
                                                    accumulate_grad_batches=accumulate_grad_batches, log_every_n_steps=100, return_best_epoch=True,
-                                                   logger=logger, accelerator='cuda', devices=find_usable_cuda_devices(n_gpu_per_trial)) # gpus must be in exclusive mode
+                                                   use_swa=use_swa, swa_cfg=swa_config, logger=logger, 
+                                                   accelerator='cuda', devices=find_usable_cuda_devices(n_gpu_per_trial)) # gpus must be in exclusive mode
         trial.set_user_attr("epochs", best_epoch) 
         
         del model
         gc.collect()
         
-        val_dataloader = DataLoader(val_dataset, batch_size=1024, shuffle=False, num_workers=num_workers_per_dataloader)
-        base_model = StockGCNModel(
+        val_dataloader = DataLoader(val_ds, batch_size=8192, shuffle=False, num_workers=num_workers_per_dataloader)
+        base_model = RecurrentModel(
             input_features=79,
             output_dim=1,
-            hidden_dim=hidden_dim,
             num_layers=num_layers,
+            hidden_dim=hidden_dim,
+            kernel_size=kernel_size,
+            dilations=dilations,
             dropout_rate=dropout_rate,
-            use_embeddings=use_embeddings,
-            embedding_dim=embedding_dim,
-            dim_feedforward_mult=dim_feedforward_mult)
-        model = JaneStreetMultiStockGraphModel.load_from_checkpoint(
+            use_attention=use_attention,
+            attention_heads=attention_heads)
+        model = JaneStreetBaseModel.load_from_checkpoint(
             best_model_path, 
             model=base_model,
             losses=[WeightedMSELoss()],
@@ -104,9 +124,9 @@ def optimize_parameters(output_dir, train_dataset, val_dataset, study_name, n_tr
         y_hat = []
         y = []
         weights = []
-        for x, targets, masks, w, s, adj in iter(val_dataloader):
+        for x, targets, w in iter(val_dataloader):
             with torch.no_grad():
-                preds = model(x.to(model.device), s.to(model.device), adj.to(model.device)).cpu()
+                preds = model(x.to(model.device)).cpu()
             y_hat.append(preds.numpy().flatten())
             y.append(targets.numpy().flatten())
             weights.append(w.numpy().flatten())
@@ -133,10 +153,9 @@ def main(dataset_path, output_dir, study_name, n_trials, storage, n_gpu, n_gpu_p
         for i in range(6, 9)
     ])
     val_ds = pl.scan_parquet(dataset_path / 'partition_id=9' / 'part-0.parquet')
-    adj_matrices = np.load(dataset_path / 'adjacency_matrices.npy')
     
-    train_dataset = JaneStreetMultiStockGraphDataset(train_ds, adj_matrices)
-    val_dataset = JaneStreetMultiStockGraphDataset(val_ds, adj_matrices)
+    train_dataset = JaneStreetMultiTimeDataset(train_ds, num_timesteps=100)
+    val_dataset = JaneStreetMultiTimeDataset(val_ds, num_timesteps=100)
     
     optuna.logging.enable_propagation()  # Propagate logs to the root logger
     optuna.logging.disable_default_handler() # Stop showing logs in sys.stderr (prevents double logs)
@@ -185,7 +204,7 @@ if __name__ == '__main__':
     NUM_WORKERS = args.num_workers_per_dataloader
     
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    model_name = f'graph_conv_tuning_{timestamp}'
+    model_name = f'rnn_tuning_{timestamp}'
     output_dir = os.path.join(OUTPUT_DIR, model_name)
     os.makedirs(output_dir)
     

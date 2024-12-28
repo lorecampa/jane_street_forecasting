@@ -31,7 +31,8 @@ def train(model: L.LightningModule,
           compile: bool = False,
           compile_kwargs: Dict[str, Any] = {},
           return_best_epoch: bool = False,
-          model_name: str = 'model'
+          model_name: str = 'model',
+          logger: Any = True, # lightning default value, otherwise pass a specific logger (e.g. CSVLogger)
     ):
     if compile:
         model = torch.compile(model, **compile_kwargs)
@@ -61,7 +62,8 @@ def train(model: L.LightningModule,
         gradient_clip_algorithm=gradient_clip_algorithm,
         callbacks=callbacks,
         accelerator=accelerator,
-        devices=devices
+        devices=devices,
+        logger=logger
     )
     trainer.fit(model=model, train_dataloaders=train_dataloader,
                 val_dataloaders=val_dataloader, ckpt_path=checkpoint_path)

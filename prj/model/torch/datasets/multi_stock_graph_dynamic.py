@@ -14,13 +14,29 @@ import lightning as L
 import lightning.pytorch.callbacks as C
 
 
-class JaneStreetMultiStockDataset(Dataset):
+class JaneStreetMultiStockDynamicGraphDataset(Dataset):
     
-    def __init__(self, dataset: pl.LazyFrame, num_stocks: int = 39):
+    def __init__(self, dataset: pl.LazyFrame, correlation_matrices: np.ndarray, num_stocks: int = 39, corr_thr: float = 0.1, load: bool = True):
         self.dataset = dataset
+        self.abs_correlation_matrices = np.abs(correlation_matrices)
         self.num_stocks = num_stocks
-        self.dataset_len = self.dataset.select(['date_id', 'time_id']).unique().collect().shape[0]
-        self._load()
+        self.diag_inds = np.arange(self.num_stocks)
+        self.corr_thr = corr_thr
+        if dataset is not None:
+            self.dataset_len = self.dataset.select(['date_id', 'time_id']).unique().collect().shape[0]
+        if load:
+            self._load()
+        
+    def __copy__(self):
+        dataset = JaneStreetMultiStockDynamicGraphDataset(None, self.abs_correlation_matrices, self.num_stocks, self.corr_thr, False)
+        dataset.dataset_len = self.dataset_len
+        dataset.X = self.X
+        dataset.y = self.y
+        dataset.weights = self.weights
+        dataset.date_ids = self.date_ids
+        dataset.masks = self.masks
+        dataset.s = self.s
+        return dataset
     
     def _load(self):
         all_combinations = (
@@ -58,11 +74,17 @@ class JaneStreetMultiStockDataset(Dataset):
         masks = self.masks[start_row:start_row+self.num_stocks]
         weights = self.weights[start_row:start_row+self.num_stocks]
         symbols = self.s[start_row:start_row+self.num_stocks]
+
+        date_id = self.date_ids[start_row]
+        adj_matrix = self.abs_correlation_matrices[date_id].copy()
+        adj_matrix[self.diag_inds, self.diag_inds] = 0
+        adj_matrix = (adj_matrix > self.corr_thr).astype(np.int32)
         
         return (
             torch.tensor(features), 
             torch.tensor(targets), 
             torch.tensor(masks), 
             torch.tensor(weights), 
-            torch.tensor(symbols)
+            torch.tensor(symbols),
+            torch.tensor(adj_matrix, dtype=torch.int)
         )

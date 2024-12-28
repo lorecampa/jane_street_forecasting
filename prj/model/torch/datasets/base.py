@@ -90,24 +90,28 @@ class JaneStreetBaseDataset(Dataset):
     def __init__(self, 
                  dataset: pl.LazyFrame,
                  features: list[str] = BASE_FEATURES,
-                 device: str = 'cpu'):
+                 device: str = 'cpu',
+                 ffill: bool = False):
         super(JaneStreetBaseDataset, self).__init__()   
         
         self.dataset = dataset
         self.features = features
         self.device = device
         self.times_col = ['date_id', 'time_id']
+        self.ffill = ffill
         self._load()
         
     def _load(self):
         preprocessed_dataset = (
             self.dataset \
-            .select(self.times_col + self.features + ['responder_6', 'weight']) \
+            .select(self.times_col + self.features + ['responder_6', 'weight', 'symbol_id']) \
             .sort(self.times_col)
         )
-        self.X = torch.FloatTensor(preprocessed_dataset.select(self.features).cast(pl.Float32).collect().to_numpy()).to(self.device)
-        self.y = torch.FloatTensor(preprocessed_dataset.select(['responder_6']).cast(pl.Float32).collect().to_numpy().flatten()).to(self.device)
-        self.weights = torch.FloatTensor(preprocessed_dataset.select(['weight']).cast(pl.Float32).collect().to_numpy().flatten()).to(self.device)
+        if self.ffill:
+            preprocessed_dataset = preprocessed_dataset.with_columns(pl.col(self.features).fill_null(strategy='forward', limit=10).over('symbol_id').fill_null(0))
+        self.X = torch.FloatTensor(preprocessed_dataset.select(self.features).cast(pl.Float32).collect().to_numpy())
+        self.y = torch.FloatTensor(preprocessed_dataset.select(['responder_6']).cast(pl.Float32).collect().to_numpy().flatten())
+        self.weights = torch.FloatTensor(preprocessed_dataset.select(['weight']).cast(pl.Float32).collect().to_numpy().flatten())
 
         
     def __len__(self):
