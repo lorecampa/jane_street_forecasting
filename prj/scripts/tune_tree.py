@@ -170,8 +170,9 @@ class TreeTuner(Tuner):
         self.end_dt = end_dt
         self.end_val_dt = end_val_dt
         self.val_ratio = val_ratio
+        self.logger = logger
         
-        print(f'Using model: {model_type}, start_dt: {start_dt}, end_dt: {end_dt}, val_ratio: {val_ratio}')
+        self.logger.info(f'Using model: {model_type}, start_dt: {start_dt}, end_dt: {end_dt}, val_ratio: {val_ratio}')
         
         model_dict = TREE_NAME_MODEL_CLASS_DICT
         
@@ -183,7 +184,7 @@ class TreeTuner(Tuner):
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
-        print(f'Loading data from {data_dir} with config args {data_args}...')
+        self.logger.info(f'Loading data from {data_dir} with config args {data_args}...')
         # train_df, val_df = self.loader.load_train_and_val(self.start_dt, self.end_dt, self.val_ratio)
         if self.end_val_dt is not None:
             complete_df = self.loader.load(self.start_dt, self.end_val_dt)
@@ -197,19 +198,19 @@ class TreeTuner(Tuner):
         max_train_date = train_df.select('date_id').max().collect().item()
         min_val_date = val_df.select('date_id').min().collect().item()
         max_val_date = val_df.select('date_id').max().collect().item()
-        print(f'Train date range: {min_train_date} - {max_train_date}, Val date range: {min_val_date} - {max_val_date}')
+        self.logger.info(f'Train date range: {min_train_date} - {max_train_date}, Val date range: {min_val_date} - {max_val_date}')
         n_dates_train = train_df.select('date_id').collect().n_unique()
         n_dates_val = val_df.select('date_id').collect().n_unique()
-        print(f'N dates train: {n_dates_train}, N dates val: {n_dates_val}')
+        self.logger.info(f'N dates train: {n_dates_train}, N dates val: {n_dates_val}')
             
         n_rows_train = train_df.select(pl.len()).collect().item()
         self.data = self.loader._build_splits(complete_df)
         self.train_data = tuple(data[:n_rows_train] for data in self.data)
         self.val_data = tuple(data[n_rows_train:] for data in self.data)
         
-        print(f'Using features: {self.loader.features}. N features: {len(self.loader.features)}')
+        self.logger.info(f'Using features: {self.loader.features}. N features: {len(self.loader.features)}')
                 
-        print(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
+        self.logger.info(f'Train: {self.train_data[0].shape}, VAL: {self.val_data[0].shape}')
         
         self.model_args = {}
         self.learn_args = {}
@@ -260,25 +261,25 @@ class TreeTuner(Tuner):
                 # Do like that to avoid creating copy of memory in case of continuous indexes
                 min_train_idx, max_train_idx = train_index.min(), train_index.max()
                 min_test_idx, max_test_idx = test_index.min(), test_index.max()
+                self.logger.info(f'Fold {i}: {min_train_idx} - {max_train_idx} - {min_test_idx} - {max_test_idx}')
                 X_k_train, X_k_test = X[min_train_idx:max_train_idx + 1], X[min_test_idx:max_test_idx + 1]
                 y_k_train, y_k_test = y[min_train_idx:max_train_idx + 1], y[min_test_idx:max_test_idx + 1]
                 w_k_train, w_k_test = w[min_train_idx:max_train_idx + 1], w[min_test_idx:max_test_idx + 1]
                 dates_k_train, dates_k_test = info[min_train_idx:max_train_idx + 1][:, 0], info[min_test_idx:max_test_idx + 1][:, 0]
-                print(f'Fold {i}: {min_train_idx} - {max_train_idx} - {min_test_idx} - {max_test_idx}')
             else:
                 X_k_train, X_k_test = X[train_index], X[test_index]
                 y_k_train, y_k_test = y[train_index], y[test_index]
                 w_k_train, w_k_test = w[train_index], w[test_index]
                 dates_k_train, dates_k_test = info[train_index][:, 0], info[test_index][:, 0]
 
-            # print(np.unique(dates_k_train), np.unique(dates_k_test)) 
-            print(f'Fold {i}: {np.min(dates_k_train)} - {np.max(dates_k_train)} - {np.min(dates_k_test)} - {np.max(dates_k_test)}')  
-            
+            # self.logger.info(np.unique(dates_k_train), np.unique(dates_k_test)) 
+            self.logger.info(f'Fold {i}: {np.min(dates_k_train)} - {np.max(dates_k_train)} - {np.min(dates_k_test)} - {np.max(dates_k_test)}')              
             self.model.train(
                 X_k_train, y_k_train, w_k_train,
                 model_args=model_args,
                 learn_args=learn_args,
             )
+            self.logger.info(f'Fold {i}: Evaluating...')
             batch_size = X_k_test.shape[0] // 5
             val_k_metrics = self.model.evaluate(X_k_test, y_k_test, w_k_test, batch_size=batch_size)
             for k, v in val_k_metrics.items():
@@ -286,11 +287,8 @@ class TreeTuner(Tuner):
                     val_metrics[k].append(v)
                 else:
                     val_metrics[k] = [v]
-            print(f"Fold {i}: {val_k_metrics['r2_w']:.3f}")
+            self.logger.info(f"Fold {i}: {val_k_metrics['r2_w']:.3f}")
             
-            del X_k_train, X_k_test, y_k_train, y_k_test, w_k_train, w_k_test
-            gc.collect()
-
                     
         return val_metrics
             
