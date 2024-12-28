@@ -27,11 +27,13 @@ class Tuner:
         custom_learn_args: dict = {},
         custom_data_args: dict = {},
         sampler_method: str = 'tpe',
+        kcross: bool = False,
         logger: Logger = None
     ):
         self.model_type = model_type
         self.data_dir = data_dir
         self.loader = None
+        self.kcross = kcross
         if logger is None:
             self.logger = get_default_logger()
         else:
@@ -98,15 +100,23 @@ class Tuner:
     
 
     def train_best_trial(self):
+        start_time = time.time()
         best_trial = self.study.best_trial
         model_args = self.model_args.copy()
         model_args.update(self.custom_model_args)
-        model_args.update(SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args))
+        best_params = SAMPLER[self.model_type](best_trial, additional_args=self.sampler_args)
+        print(f'Best params: {best_params}')
+        model_args.update(best_params)
                 
         learn_args = self.learn_args.copy()
         learn_args.update(self.custom_learn_args)
         
         self.train(model_args=model_args, learn_args=learn_args) 
+        self.logger.info(f"Train finished in {(time.time() - start_time)/60:.2f} minutes")
+        
+        if self.val_data is not None and len(self.val_data[0]) > 0:
+            val_metrics = self.evaluate()
+            self.logger.info(f"Validation metrics: {val_metrics}")
         
     def _setup_directories(self):
         self.optuna_dir = f'{self.out_dir}/optuna'
@@ -127,10 +137,15 @@ class Tuner:
             
             learn_args = self.learn_args.copy()
             learn_args.update(self.custom_learn_args)
+            
+            if self.kcross:
+                val_metrics_folds = self.train_kcross(model_args=model_args, learn_args=learn_args)
+                trial.set_user_attr("val_metrics_folds", str(val_metrics_folds))
+                val_metrics = {k: np.mean(v) for k, v in val_metrics_folds.items()}
+                print(val_metrics_folds['r2_w'], np.std(val_metrics_folds['r2_w']))
+            else:    
+                val_metrics = self.train(model_args=model_args, learn_args=learn_args)
                         
-            self.train(model_args=model_args, learn_args=learn_args)
-                        
-            val_metrics = self.evaluate()
             trial.set_user_attr("val_metrics", str(val_metrics))
             
             if trial.number > 0:

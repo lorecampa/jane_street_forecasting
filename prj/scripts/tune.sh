@@ -57,37 +57,24 @@ python prj/scripts/tune_tree.py \
 
 
 # Tree
+
+START_DT=1020
+END_DT=1698
+
 START_DT=850
 END_DT=1529
+END_VAL_DT=1529
 
 python prj/scripts/tune_tree.py \
     --model lgbm \
     --start_dt $START_DT \
     --end_dt $END_DT \
-    --val_ratio 0.2 \
+    --end_val_dt $END_VAL_DT \
     --n_trials 300 \
     --n_seeds 1 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
+    --kcross \
     --train
-
-
-START_DT=850
-END_DT=1529
-
-python prj/scripts/tune_tree.py \
-    --model lgbm \
-    --start_dt $START_DT \
-    --end_dt $END_DT \
-    --val_ratio 0.2 \
-    --n_trials 300 \
-    --n_seeds 5 \
-    --study_name lgbm_1seeds_850_1529-0.2_20241219_131622 \
-    --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
-    --train
-
-
-
-
 
 # Tree LGBM Binary
 python prj/scripts/tune_lgbm_binary.py \
@@ -95,7 +82,7 @@ python prj/scripts/tune_lgbm_binary.py \
     --n_trials 300 \
     --n_seeds 1 \
     --verbose -1 \
-    --study_name lgbm_1seeds_max_bin_128_0_8-9_9_20241211_003129 \
+    --study_name lgbm_1seeds_850_1529-0.2_20241219_131622 \
     --storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
     --train
 
