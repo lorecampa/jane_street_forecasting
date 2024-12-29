@@ -56,8 +56,8 @@ class DataLoader:
         self.include_knn_features = config.include_knn_features
         self.include_intrastock_norm_temporal = config.include_intrastock_norm_temporal
         
-        # self.categorical_features = ['feature_09', 'feature_10', 'feature_11']
-        self.categorical_features = []
+        self.categorical_features = ['feature_09', 'feature_10', 'feature_11']
+        # self.categorical_features = []
         self.target = "responder_6"
         self.features = None
         self.window_period = 7                    
@@ -122,14 +122,30 @@ class DataLoader:
             data_path
         ).filter(pl.col('date_id').is_between(start_dt, end_dt))\
         .sort('date_id', 'time_id')
-            
+        
+        # date_time_id_df = df.select('date_id', 'time_id').unique(maintain_order=True).with_row_index('date_time_id').collect()
+        # df = df.join(date_time_id_df.lazy(), on=['date_id', 'time_id'], how='left', maintain_order='left')
+        
+        # df = df.with_columns(
+        #     pl.all().shuffle(seed=42).over(['date_id', 'time_id'])
+        # )
+        
         self.features = [f'feature_{i:02d}' for i in range(79)]
         if self.include_symbol_id:
             self.features.append('symbol_id')
         if self.include_time_id:
-            df = df.with_columns(
-                pl.col('time_id').truediv(pl.col('time_id').max().over('date_id', 'symbol_id')).alias('time_id_norm')
-            )
+            df_time_id = df.select('date_id', 'time_id', 'symbol_id').group_by('date_id', 'symbol_id').agg(pl.all().max()).collect()
+            first_date_id = df_time_id['date_id'].min()
+            df_time_id = pl.concat([
+                df_time_id.filter(pl.col('date_id').eq(first_date_id)),
+                df_time_id.with_columns(
+                    pl.col('date_id').add(1)
+                )
+            ]).rename({'time_id': 'max_prev_date_time_id'})
+            df = df.join(df_time_id.lazy(), on=['date_id', 'symbol_id'], how='left', maintain_order='left').with_columns(
+                pl.col('time_id').truediv(pl.col('max_prev_date_time_id')).alias('time_id_norm')
+            ).drop('max_prev_date_time_id')
+
             self.features.append('time_id_norm')
                 
         if self.include_lags:
@@ -334,6 +350,8 @@ class DataLoader:
                 df_corr_responder = pivot.select(cols).corr()
                 linked = linkage(df_corr_responder, method='ward')
                 cluster_labels = fcluster(linked, t=2.5, criterion='distance')
+                
+                
                 # print(stocks, cluster_labels)
                 res = res.with_columns(
                     pl.col('symbol_id').replace_strict(
