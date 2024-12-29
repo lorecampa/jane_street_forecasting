@@ -20,6 +20,7 @@ from lightning.pytorch.accelerators import find_usable_cuda_devices
 from lightning.pytorch.loggers import CSVLogger
 from torch.utils.data import Dataset, DataLoader
 import torch
+from torch import nn
 import numpy as np
 import gc
 from pathlib import Path
@@ -51,35 +52,47 @@ def optimize_parameters(output_dir, model_path, initial_dataset, online_learning
     def obj_function(trial):
         
         base_model = Mlp(79, hidden_dims=[512, 256], dropout_rate=0.3, final_mult=5.0, use_tanh=True)
-        model = JaneStreetBaseModel.load_from_checkpoint(
-            model_path, 
-            model=base_model,
-            losses=[WeightedMSELoss()],
-            loss_weights=[1],
-            l1_lambda=0,
-            l2_lambda=0)
+        model = JaneStreetBaseModel.load_from_checkpoint(model_path, model=base_model, losses=[WeightedMSELoss()], loss_weights=[1])
         device = find_usable_cuda_devices(1)[0]
         model = model.to(f'cuda:{device}')
         model.eval()
         
         # hyperparameters
         train_every = trial.suggest_int('train_every', 10, 40)
-        n_epochs_per_train = trial.suggest_int('n_epochs_per_train', 1, 30)
-        dataset_max_size = trial.suggest_int('dataset_max_size', 1000000, 10000000, step=1000000)
-        batch_size = trial.suggest_categorical("batch_size", [1024, 2048, 4096, 8192, 16384, 32768, 65536])
-        lr = trial.suggest_float("lr", 1e-6, 1e-4, step=1e-6)
-        weight_decay = trial.suggest_float('weight_decay', 1e-5, 0.01, log=True)
-        amsgrad = trial.suggest_categorical("amsgrad", [True, False])
-        beta1 = trial.suggest_float("beta1", 0.8, 0.99, step=0.01)
-        beta2 = trial.suggest_float("beta2", 0.9, 0.999, step=0.001)
+        n_epochs_per_train = trial.suggest_int('n_epochs_per_train', 1, 20)
+        old_data_fraction = trial.suggest_float('old_data_fraction', 0.01, 0.9, step=0.01)
+        batch_size = trial.suggest_categorical("batch_size", [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536])
+        gradient_clipping = trial.suggest_float('gradient_clipping', 0.1, 20, step=0.1)
+        freeze_bn = trial.suggest_categorical("freeze_bn", [True, False])
+        disable_dropout = trial.suggest_categorical("disable_dropout", [True, False])
         
-        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay, amsgrad=amsgrad, betas=(beta1, beta2))
-        dataset = initial_dataset[-dataset_max_size:, :].clone()
+        optimizer = trial.suggest_categorical('optimizer', ['AdamW', 'Adam', 'SGD'])
+        lr = trial.suggest_float("lr", 1e-7, 1e-4, step=1e-7)
+        use_weight_decay = trial.suggest_categorical('use_weight_decay', [True, False]) if optimizer != 'AdamW' else True
+        weight_decay = trial.suggest_float('weight_decay', 1e-5, 0.01, log=True) if use_weight_decay else 0
+        if optimizer != 'SGD':
+            amsgrad = trial.suggest_categorical("amsgrad", [True, False])
+            beta1 = trial.suggest_float("beta1", 0.8, 0.99, step=0.01)
+            beta2 = trial.suggest_float("beta2", 0.9, 0.999, step=0.001)
+            optimizer_cls = torch.optim.AdamW if optimizer == 'AdamW' else torch.optim.Adam
+            optimizer = optimizer_cls(model.parameters(), lr=lr, weight_decay=weight_decay, amsgrad=amsgrad, betas=(beta1, beta2))
+        else:
+            momentum = trial.suggest_float('momentum', 0.8, 0.99)
+            nesterov = trial.suggest_categorical('nesterov', [True, False])
+            optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum, nesterov=nesterov)
+            
+        use_weighted_loss = trial.suggest_categorical('use_weighted_loss', [True, False])
+        loss_fn = WeightedMSELoss() if use_weighted_loss else nn.MSELoss()
+        
+        old_dataset = initial_dataset.clone()
+        new_dataset = None
         date_idx = 0
         
         y_hat = []
         y = []
         weights = []
+        daily_r2 = []
+        partition_9_id_start = None
         
         # in this setting, we assume that in one predict we can do all the epochs (it is impossible to simulate otherwise,
         # due to different gpu environments), but is a reasonable approximation as in 9/10 time_ids a kaggle cpu env can
@@ -88,7 +101,22 @@ def optimize_parameters(output_dir, model_path, initial_dataset, online_learning
             
             if (date_idx + 1) % train_every == 0:
                 model.train()
-                train_dataloader = BaseDataset(dataset)
+                if freeze_bn:
+                    for module in model.modules():
+                        # freeze batch normalization parameters
+                        if isinstance(module, nn.BatchNorm2d):
+                            if hasattr(module, 'weight'):
+                                module.weight.requires_grad_(False)
+                            if hasattr(module, 'bias'):
+                                module.bias.requires_grad_(False)
+                            module.eval() # do not change the running mean and var
+                if disable_dropout:
+                    for module in model.modules():
+                        if isinstance(module, nn.Dropout):
+                            module.p = 0 # disable dropout by putting probability to zero
+                            
+                old_data_len = min(old_dataset.shape[0], old_data_fraction * new_dataset.shape[0] / (1 - old_data_fraction))
+                train_dataloader = BaseDataset(pl.concat([old_dataset.sample(n=old_data_len), new_dataset]))
                 train_dataloader = DataLoader(train_dataloader, shuffle=True, batch_size=batch_size, num_workers=num_workers_per_dataloader)
                 # logger = CSVLogger(os.path.join(output_dir, 'logs'), name=None, version=f'trial_{trial.number}_date_id_{date_idx}')
                 # model = train(model, train_dataloader, None, use_model_ckpt=False, accelerator='cuda', devices=[device], logger=logger, 
@@ -97,15 +125,23 @@ def optimize_parameters(output_dir, model_path, initial_dataset, online_learning
                     for x, targets, w in train_dataloader:
                         optimizer.zero_grad()
                         y_out = model.forward(x.to(model.device)).squeeze()
-                        loss = model._compute_loss(y_out, targets.to(model.device), w.to(model.device))
+                        if use_weighted_loss:
+                            loss = loss_fn(y_out, targets.to(model.device), w.to(model.device))
+                        else:
+                            loss = loss_fn(y_out, targets.to(model.device))
                         loss.backward()
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping)
                         optimizer.step()
                 model.eval()
+                old_dataset = old_dataset.vstack(new_dataset)
+                new_dataset = None
 
             date_idx += 1
             test_ = test.select(COLUMNS).fill_null(0).fill_nan(0)      
-            dataset = dataset.vstack(test_)
-            dataset = dataset[-dataset_max_size:]
+            new_dataset = test_ if new_dataset is None else new_dataset.vstack(test_)
+            
+            # if date_id[0] == 1530:
+            #     partition_9_id_start = len(y_hat)
             
             x = torch.tensor(test_.select(FEATURE_COLS).to_numpy(), dtype=torch.float32).to(model.device)
             with torch.no_grad():
@@ -113,20 +149,22 @@ def optimize_parameters(output_dir, model_path, initial_dataset, online_learning
             y_hat.append(preds)
             y.append(test_.select(['responder_6']).to_numpy().flatten())
             weights.append(test_.select(['weight']).to_numpy().flatten())
+            daily_r2.append(weighted_r2_score(preds, y[-1], weights[-1]))
         
-        y = np.concatenate(y)
-        y_hat = np.concatenate(y_hat)
-        weights = np.concatenate(weights)
-        score = weighted_r2_score(y_hat, y, weights)
+        score = weighted_r2_score(np.concatenate(y_hat), np.concatenate(y), np.concatenate(weights))
+        # partition_9_score = weighted_r2_score(np.concatenate(y_hat[partition_9_id_start:]), np.concatenate(y[partition_9_id_start:]), np.concatenate(weights[partition_9_id_start:]))
+        daily_r2 = np.array(daily_r2)
+        sharpe = np.mean(daily_r2) / np.std(daily_r2)
+        stability_index = np.sum(daily_r2 > 0) / daily_r2.shape[0]
         
-        del model, y, y_hat, weights, dataset
+        del model, y, y_hat, weights, old_dataset, new_dataset
         gc.collect()
         
-        return score
+        return score, sharpe, stability_index
     
-    study = optuna.create_study(direction='maximize', study_name=study_name, storage=storage, load_if_exists=True)    
+    study = optuna.create_study(directions=['maximize', 'maximize', 'maximize'], study_name=study_name, storage=storage, load_if_exists=True)    
     study.optimize(obj_function, n_trials=n_trials, n_jobs=n_gpu // n_gpu_per_trial)
-    return study.best_params, study.trials_dataframe()
+    return study.trials_dataframe()
         
 
 def main(dataset_path, output_dir, study_name, n_trials, storage, n_gpu, n_gpu_per_trial, num_workers_per_dataloader):
@@ -140,14 +178,14 @@ def main(dataset_path, output_dir, study_name, n_trials, storage, n_gpu, n_gpu_p
     optuna.logging.enable_propagation()  # Propagate logs to the root logger
     optuna.logging.disable_default_handler() # Stop showing logs in sys.stderr (prevents double logs)
 
-    best_params, trials_df = optimize_parameters(output_dir, model_path, initial_dataset, online_learning_dataset, study_name, n_trials, 
-                                                 storage, n_gpu, n_gpu_per_trial, num_workers_per_dataloader)
+    trials_df = optimize_parameters(output_dir, model_path, initial_dataset, online_learning_dataset, study_name, n_trials, 
+                                    storage, n_gpu, n_gpu_per_trial, num_workers_per_dataloader)
     
-    params_file_path = os.path.join(output_dir, 'best_params.json')
-    logging.info(f'Best parameters: {best_params}')
-    logging.info(f'Saving the best parameters at: {params_file_path}')
-    with open(params_file_path, 'w') as params_file:
-        json.dump(best_params, params_file)    
+    # params_file_path = os.path.join(output_dir, 'best_params.json')
+    # logging.info(f'Best parameters: {best_params}')
+    # logging.info(f'Saving the best parameters at: {params_file_path}')
+    # with open(params_file_path, 'w') as params_file:
+    #     json.dump(best_params, params_file)    
         
     trials_file_path = os.path.join(output_dir, 'trials_dataframe.csv')
     logging.info(f'Saving the trials dataframe at: {trials_file_path}')

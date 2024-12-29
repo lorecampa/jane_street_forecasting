@@ -12,7 +12,8 @@ class JaneStreetBaseModel(L.LightningModule):
     def __init__(self, 
                  model: nn.Module,
                  losses: List[nn.Module] | nn.Module, 
-                 loss_weights: List[float], 
+                 loss_weights: List[float],
+                 weight_loss_flags: List[bool] = [True],
                  l1_lambda: float = 1e-4,
                  l2_lambda: float = 1e-4,
                  optimizer: str = 'Adam',
@@ -21,11 +22,13 @@ class JaneStreetBaseModel(L.LightningModule):
                  scheduler_cfg: Dict[str, Any] = dict()):
         super(JaneStreetBaseModel, self).__init__()   
         assert isinstance(losses, nn.Module) or len(losses) == len(loss_weights), 'Each loss must have a weight'
+        assert isinstance(losses, nn.Module) or len(losses) == len(weight_loss_flags), 'Each loss must be weighted or not'
         assert len(loss_weights) == 0 or min(loss_weights) > 0, 'Losses must have positive weights'
         self.model = model
         losses = [losses] if isinstance(losses, nn.Module) else losses
         self.losses = nn.ModuleList(losses) 
         self.loss_weights = [1.0] if isinstance(losses, nn.Module) else loss_weights
+        self.weight_loss_flags = [weight_loss_flags] if isinstance(losses, nn.Module) else weight_loss_flags
         self.l1_lambda = l1_lambda
         self.l2_lambda = l2_lambda
         self.optimizer_name = optimizer
@@ -80,7 +83,10 @@ class JaneStreetBaseModel(L.LightningModule):
     def _compute_loss(self, preds, targets, weights):
         loss = 0
         for i in range(len(self.losses)):
-            loss += self.losses[i](preds, targets, weights=weights) * self.loss_weights[i]
+            if self.weight_loss_flags[i]:
+                loss += self.losses[i](preds, targets, weights=weights) * self.loss_weights[i]
+            else:
+                loss += self.losses[i](preds, targets) * self.loss_weights[i]
         return loss
     
     def _regularization_loss(self):

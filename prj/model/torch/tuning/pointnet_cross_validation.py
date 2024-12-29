@@ -33,19 +33,19 @@ def optimize_parameters(output_dir, train_datasets, val_datasets, study_name, n_
         
         batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024, 2048, 4096])
         
-        num_layers_extractor = trial.suggest_int("num_layers_extractor", 1, 6)
+        num_layers_extractor = trial.suggest_int("num_layers_extractor", 1, 4)
         final_hidden_dims_extractor = trial.suggest_int("final_hidden_dims_extractor", 16, 256, step=16)
         hidden_dims_extractor = [final_hidden_dims_extractor]
         if num_layers_extractor > 1:
-            hidden_dims_decay_extractor = trial.suggest_float("hidden_dims_decay_extractor", 1, 3, step=0.1)
+            hidden_dims_decay_extractor = trial.suggest_float("hidden_dims_decay_extractor", 1, 2, step=0.1)
             for _ in range(num_layers_extractor - 1):
                 hidden_dims_extractor = [int(hidden_dims_extractor[0] * hidden_dims_decay_extractor)] + hidden_dims_extractor
                 
-        num_layers_aggregator = trial.suggest_int("num_layers_aggregator", 1, 6)
+        num_layers_aggregator = trial.suggest_int("num_layers_aggregator", 1, 4)
         final_hidden_dims_aggregator = trial.suggest_int("final_hidden_dims_aggregator", 16, 256, step=16)
         hidden_dims_aggregator = [final_hidden_dims_aggregator]
         if num_layers_aggregator > 1:
-            hidden_dims_decay_aggregator = trial.suggest_float("hidden_dims_decay_aggregator", 1, 3, step=0.1)
+            hidden_dims_decay_aggregator = trial.suggest_float("hidden_dims_decay_aggregator", 1, 2, step=0.1)
             for _ in range(num_layers_aggregator - 1):
                 hidden_dims_aggregator = [int(hidden_dims_aggregator[0] * hidden_dims_decay_aggregator)] + hidden_dims_aggregator
         

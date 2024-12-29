@@ -1,11 +1,11 @@
 #!/usr/bin/bash
-#SBATCH --job-name ObjectDetection3Dv10
+#SBATCH --job-name ObjectDetection3Dv3
 #SBATCH --account DD-24-8
 #SBATCH --partition qgpu
 #SBATCH --gpus 1
 #SBATCH --time 48:00:00
-#SBATCH --error /mnt/proj2/dd-24-8/frustum_datasets/last/mlp_fine_tuning_v2/job.err
-#SBATCH --output /mnt/proj2/dd-24-8/frustum_datasets/last/mlp_fine_tuning_v2/job.out
+#SBATCH --error /mnt/proj2/dd-24-8/frustum_datasets/last/mlp_train/job.err
+#SBATCH --output /mnt/proj2/dd-24-8/frustum_datasets/last/mlp_train/job.out
 #SBATCH --gres=gpu:1
 #SBATCH --nodes 1
 
@@ -20,11 +20,11 @@ source $HOME/venv_new/bin/activate
 
 PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
 export CUDA_VISIBLE_DEVICES=0
-python $HOME/jane_street_forecasting/prj/model/torch/tuning/mlp_fine_tuning_v2.py \
-	-output_dir /mnt/proj2/dd-24-8/frustum_datasets/last/mlp_fine_tuning_v2 \
+python $HOME/jane_street_forecasting/prj/model/torch/tuning/mlp_training.py \
+	-output_dir /mnt/proj2/dd-24-8/frustum_datasets/last/mlp_train \
 	-dataset_path /mnt/proj2/dd-24-8/frustum_datasets/last/dataset/train.parquet \
-	-n_trials 300 \
-    -study_name mlp_fine_tuning_v2 \
+	-n_trials 100 \
+    -study_name mlp_train \
 	-storage sqlite:////mnt/proj2/dd-24-8/frustum_datasets/last/tuning.db \
     -n_gpus 1 \
 	-n_gpus_per_trial 1 \
