@@ -186,7 +186,7 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
 
                 date_idx += 1
                 test_ = test.select(AUX_COLS + features)
-                new_dataset = test_ if new_dataset is None else pl.concat([new_dataset, test_])
+                new_dataset = test_ if new_dataset is None else new_dataset.vstack(test_)
                 
     
                 
@@ -201,7 +201,7 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
         weights = np.concatenate(weights)
         daily_r2 = np.array(daily_r2)
         
-        partitions = online_learning_dataset.select('partition_id').unique().collect().to_series().to_list()
+        partitions = online_learning_dataset.select('partition_id').unique().collect().to_series().sort().to_list()
         partition_index_df = online_learning_dataset.select('partition_id', 'date_id').with_row_index('index').collect()
         
         partition_scores = []
