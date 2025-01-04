@@ -20,7 +20,7 @@ import gc
 from pathlib import Path
 
 LOGGING_FORMATTER = "%(asctime)s:%(name)s:%(levelname)s: %(message)s"
-AUX_COLS = ['date_id', 'time_id', 'symbol_id', 'weight', 'responder_6']
+AUX_COLS = ['date_id', 'time_id', 'symbol_id', 'weight', 'responder_6', 'partition_id']
 
 MAX_BOOST_ROUNDS = 1000
 OLD_DATASET_MAX_HISTORY = 30
@@ -94,30 +94,42 @@ def _sample_lgbm_params(trial: optuna.Trial, additional_args: dict = {}) -> dict
         if max_bin is not None:
             params['max_bin'] = max_bin
         else:
-            params['max_bin'] = trial.suggest_int('max_bin', 8, 512, log=True)
+            params['max_bin'] = trial.suggest_int('max_bin', 8, 256, log=True)
     
     return params
 
-def train(init_model: lgb.Booster, params: dict, train_dl: pl.LazyFrame, val_dl: pl.LazyFrame, use_weighted_loss, metric, output_dir, es_patience, features):
+def train(params: dict, train_dl: pl.LazyFrame, val_dl: pl.LazyFrame, use_weighted_loss, metric, output_dir, es_patience, features):
     start_time = time.time()
     _params = params.copy()
     if metric is not None:
         _params['metric'] = metric
     
-    X_train, y_train, w_train = build_splits(train_dl, features)
-    train_data = lgb.Dataset(data=X_train, label=y_train, weight=w_train if use_weighted_loss else None)
-    del X_train, y_train, w_train
-    gc.collect()
-
-    if EARLY_STOPPING:
-        X_val, y_val, w_val = build_splits(val_dl, features)
-        val_data = lgb.Dataset(data=X_val, label=y_val, weight=w_val if use_weighted_loss else None)
-        del val_data
+    # X_train, y_train, w_train = build_splits(train_dl, features)
+    # train_data = lgb.Dataset(data=X_train, label=y_train, weight=w_train if use_weighted_loss else None)
+    # del X_train, y_train, w_train
+    # gc.collect()
+    
+    print('Loading binary file')
+    binary_path = "/home/lorecampa/projects/jane_street_forecasting/dataset/binary/lgbm_maxbin_63_4_7.bin"
+    train_data =lgb.Dataset(data=binary_path, params={
+        'feature_pre_filter': False,
+    })
+    logging.info('Binary file loaded')
 
     
     callbacks = []
     if EARLY_STOPPING:
+        X_val, y_val, w_val = build_splits(val_dl, features)
         callbacks += [lgb.early_stopping(stopping_rounds=es_patience), lgb.log_evaluation(period=LOG_PERIOD)]
+    else:
+        # Dummy eval set to log the training progress, cannot find other way to log the training status
+        first_val_date: int = val_dl.select(pl.col('date_id').min()).collect().item()
+        X_val, y_val, w_val = build_splits(val_dl.filter(pl.col('date_id').eq(first_val_date)).limit(1000), features)
+        callbacks += [lgb.log_evaluation(period=LOG_PERIOD)]
+    
+    val_data = lgb.Dataset(data=X_val, label=y_val, weight=w_val if use_weighted_loss else None, reference=train_data)
+    del X_val, y_val, w_val
+    gc.collect()
         
     print(f"Learning rate: {_params['learning_rate']:.4f}")
     num_boost_round = _params.pop('n_estimators')
@@ -126,8 +138,8 @@ def train(init_model: lgb.Booster, params: dict, train_dl: pl.LazyFrame, val_dl:
         _params, 
         train_data, 
         num_boost_round=num_boost_round, 
-        init_model=init_model, 
-        valid_sets=[val_data] if EARLY_STOPPING else None, 
+        valid_sets=[val_data],
+        valid_names=['val' if EARLY_STOPPING else 'dummy_val'], 
         callbacks=callbacks,
         feval=METRIC_FN_DICT[metric] if metric in METRIC_FN_DICT else None
     )
@@ -151,7 +163,10 @@ def optimize_parameters(output_dir, pretrain_dataset: pl.LazyFrame, pretrain_es_
         use_weighted_loss = trial.suggest_categorical('use_weighted_loss', [True, False])
         metric = None
         
-        params = _sample_lgbm_params(trial, additional_args={'use_gpu': torch.cuda.is_available()})
+        use_gpu = torch.cuda.is_available()
+        
+        additional_args = {'use_gpu': use_gpu, 'max_bin': 63}
+        params = _sample_lgbm_params(trial, additional_args=additional_args)
         
         tmp_checkpoint_dir = os.path.join(output_dir, f'trial_{trial.number}')
         os.makedirs(tmp_checkpoint_dir)
@@ -169,9 +184,8 @@ def optimize_parameters(output_dir, pretrain_dataset: pl.LazyFrame, pretrain_es_
         
          
         model, initial_wr2_score = train(
-            init_model=None, 
             train_dl=pretrain_dataset,
-            val_dl=pretrain_es_dataset if pretrain_es_dataset else None,
+            val_dl=pretrain_es_dataset if EARLY_STOPPING else evaluation_dataset,
             use_weighted_loss=use_weighted_loss,
             metric=metric,
             es_patience=50,
@@ -230,12 +244,13 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     config = DataConfig(**data_args)
     loader = DataLoader(data_dir=dataset_path, config=config)
     
-    pretraining_dataset = loader.load_with_partition(5, 7)
+    # pretraining_dataset = loader.load_with_partition(5, 7)
     # pretraining_dataset = loader.load(1000, 1150)
     
-    features = loader.features
-    print(f'Loaded features: {features}')
-    pretraining_dataset = pretraining_dataset.select(AUX_COLS + features)
+    
+    # pretraining_dataset = pretraining_dataset.select(AUX_COLS + features)
+    
+    pretraining_dataset = None
     
     pretrain_es_dataset = None
     if EARLY_STOPPING:
@@ -246,9 +261,12 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     evaluation_dataset = loader.load_with_partition(8, 9)
     # evaluation_dataset = loader.load(1151, 1200)
     
-    evaluation_dataset = evaluation_dataset.select(AUX_COLS + features)
+    features = loader.features
+    print(f'Loaded features: {features}')
     
-        
+    evaluation_dataset = evaluation_dataset.select(AUX_COLS + features)
+
+    
     optuna.logging.enable_propagation()  # Propagate logs to the root logger
     optuna.logging.disable_default_handler() # Stop showing logs in sys.stderr (prevents double logs)
 

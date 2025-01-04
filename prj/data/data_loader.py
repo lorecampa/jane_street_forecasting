@@ -328,6 +328,7 @@ class DataLoader:
             # print(f"Processing {min_date}-{max_date}")
             
             if max_date - min_date != period:
+                print(f"Skipping {min_date}-{max_date}")
                 return pl.DataFrame({}, schema=schema)
             
             pivot = batch.filter(pl.col('date_id') < max_date)\
