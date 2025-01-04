@@ -91,13 +91,11 @@ def train_with_es(init_model: lgb.Booster, params: dict, train_df: pl.LazyFrame,
     return model
 
 
-def optimize_parameters(model: lgb.Booster, y_pred_offline, output_dir, online_old_dataset: pl.LazyFrame, online_learning_dataset: pl.LazyFrame, features: list, study_name, n_trials, storage):   
+def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online_old_dataset: pl.LazyFrame, online_learning_dataset: pl.LazyFrame, features: list, study_name, n_trials, storage):   
     def obj_function(trial):
-        
         logging.info(f'Trial {trial.number}')
         
-        # train_every = trial.suggest_int('train_every', 20, 50)
-        train_every = 200
+        train_every = trial.suggest_int('train_every', 20, 50)
         last_n_days_es = trial.suggest_int('last_n_days_es', 5, 14)
         old_data_fraction = trial.suggest_float('old_data_fraction', 0.01, 0.5, step=0.01)
         
@@ -112,6 +110,7 @@ def optimize_parameters(model: lgb.Booster, y_pred_offline, output_dir, online_o
         tmp_checkpoint_dir = os.path.join(output_dir, f'trial_{trial.number}')
         os.makedirs(tmp_checkpoint_dir)
 
+        model = lgb.Booster(model_file=model_file_path)
         params = model.params.copy()
         initial_lr = params['learning_rate']
     
@@ -310,7 +309,7 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     optuna.logging.enable_propagation()  # Propagate logs to the root logger
     optuna.logging.disable_default_handler() # Stop showing logs in sys.stderr (prevents double logs)
 
-    trials_df = optimize_parameters(model=model, y_pred_offline=y_pred_offline, output_dir=output_dir, online_old_dataset=old_dataset, online_learning_dataset=online_learning_dataset, features=features, study_name=study_name, n_trials=n_trials, 
+    trials_df = optimize_parameters(model_file_path=model_file_path, y_pred_offline=y_pred_offline, output_dir=output_dir, online_old_dataset=old_dataset, online_learning_dataset=online_learning_dataset, features=features, study_name=study_name, n_trials=n_trials, 
                                     storage=storage)
 
         
