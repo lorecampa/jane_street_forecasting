@@ -42,10 +42,10 @@ def evaluate_model(model, X, y, w) -> float:
     y_pred = model.predict(X).clip(-5, 5).flatten()
     return r2_score(y_true=y, y_pred=y_pred, sample_weight=w)
 
-def build_splits(df: pl.LazyFrame, features: list):
-    X = df.select(features).collect().to_numpy()
-    y = df.select(['responder_6']).collect().to_numpy().flatten()
-    w = df.select(['weight']).collect().to_numpy().flatten()
+def build_splits(df: pl.DataFrame, features: list):
+    X = df.select(features).to_numpy()
+    y = df['responder_6'].to_numpy().flatten()
+    w = df['weight'].to_numpy().flatten()
     return X, y, w
 
 METRIC_FN_DICT = {
@@ -53,7 +53,7 @@ METRIC_FN_DICT = {
 }
 
 
-def train_with_es(init_model: lgb.Booster, params: dict, train_df: pl.LazyFrame, val_df: pl.LazyFrame, use_weighted_loss, metric, output_dir, es_patience, features):
+def train_with_es(init_model: lgb.Booster, params: dict, train_df: pl.DataFrame, val_df: pl.DataFrame, use_weighted_loss, metric, output_dir, es_patience, features):
     start_time = time.time()
     _params = params.copy()
     _params.pop('num_iterations', None)
@@ -125,8 +125,8 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
         batch_size = 500
         
         
-        new_dataset: typing.Optional[pl.LazyFrame] = None
-        old_dataset: pl.LazyFrame = online_old_dataset.clone()
+        new_dataset: typing.Optional[pl.DataFrame] = None
+        old_dataset: pl.DataFrame = online_old_dataset.collect()
         
         for i in range(0, len(date_ids), batch_size):
             batch_online_learning_dataset = online_learning_dataset.filter(pl.col('date_id').is_between(date_ids[i], date_ids[min(i+batch_size, len(date_ids))-1])).collect()
@@ -135,24 +135,24 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
                 date_id = date_id[0]
             
                 if (date_idx + 1) % train_every == 0:                
-                    max_date = new_dataset.select('date_id').max().collect().item()
+                    max_date = new_dataset['date_id'].max()
                     new_validation_dataset = new_dataset.filter(pl.col('date_id') > max_date - last_n_days_es)
                     new_training_dataset = new_dataset.filter(pl.col('date_id') <= max_date - last_n_days_es)
                     
                     
                     if verbose:
-                        old_days = old_dataset.select('date_id').unique().collect().to_series().sort().to_list()
-                        train_days = new_training_dataset.select('date_id').unique().collect().to_series().sort().to_list()
-                        val_days = new_validation_dataset.select('date_id').unique().collect().to_series().sort().to_list()
+                        old_days = old_dataset['date_id'].unique().sort().to_list()
+                        train_days = new_training_dataset['date_id'].unique().sort().to_list()
+                        val_days = new_validation_dataset['date_id'].unique().sort().to_list()
                         print('Old days: ', old_days)
                         print('Train days: ', train_days)
                         print('Val days: ', val_days)
                     
-                    new_training_dataset_len = new_training_dataset.select(pl.len()).collect().item()
-                    old_dataset_len = old_dataset.select(pl.len()).collect().item()
+                    new_training_dataset_len = new_training_dataset.shape[0]
+                    old_dataset_len = old_dataset.shape[0]
                     old_data_len = min(int(old_data_fraction * new_training_dataset_len / (1 - old_data_fraction)), old_dataset_len)
                     
-                    train_df = pl.concat([old_dataset.collect().sample(n=old_data_len).lazy(), new_training_dataset])
+                    train_df = pl.concat([old_dataset.sample(n=old_data_len), new_training_dataset])
                     val_df = new_validation_dataset
                     
                     logging.info(f'Starting fine tuning at date {date_id}')
@@ -174,7 +174,7 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
                         features=features
                     )
                                         
-                    max_old_dataset_date = new_training_dataset.select('date_id').max().collect().item()
+                    max_old_dataset_date = new_training_dataset['date_id'].max()
                     old_dataset = pl.concat([
                         old_dataset,
                         new_training_dataset
@@ -186,7 +186,7 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
 
                 date_idx += 1
                 test_ = test.select(AUX_COLS + features)
-                new_dataset = test_.lazy() if new_dataset is None else pl.concat([new_dataset, test_.lazy()])
+                new_dataset = test_ if new_dataset is None else pl.concat([new_dataset, test_])
                 
     
                 
@@ -223,7 +223,7 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
             
             score = r2_score(y_true=y_p, y_pred=y_hat_p, sample_weight=w_p)
             score_offline = r2_score(y_true=y_p, y_pred=y_hat_offline_p, sample_weight=w_p)
-            sharpe = np.mean(daily_r2_p) / np.std(daily_r2_p)
+            sharpe = np.mean(daily_r2_p) / np.std(daily_r2_p)            
             stability_index = np.sum(daily_r2_p > 0) / daily_r2_p.shape[0]
             
             partition_scores.append(score)
@@ -292,7 +292,7 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     model = lgb.Booster(model_file=model_file_path)
     
     # Offline scores
-    X_online, y_online, w_online = build_splits(online_learning_dataset, features)
+    X_online = online_learning_dataset.select(features).collect().to_numpy()
     y_pred_offline = []
     pred_batch_size = 1000000
     for i in tqdm(range(0, X_online.shape[0], pred_batch_size), desc='Predicting offline'):
@@ -300,7 +300,7 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     
     y_pred_offline = np.concatenate(y_pred_offline)
     
-    del X_online, y_online, w_online
+    del X_online
     gc.collect()
         
 
