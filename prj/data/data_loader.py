@@ -121,15 +121,9 @@ class DataLoader:
         df = pl.scan_parquet(
             data_path
         ).filter(pl.col('date_id').is_between(start_dt, end_dt))\
-        .sort('date_id', 'time_id')
+        .sort('date_id', 'time_id', 'symbol_id')
         
-        # date_time_id_df = df.select('date_id', 'time_id').unique(maintain_order=True).with_row_index('date_time_id').collect()
-        # df = df.join(date_time_id_df.lazy(), on=['date_id', 'time_id'], how='left', maintain_order='left')
-        
-        # df = df.with_columns(
-        #     pl.all().shuffle(seed=42).over(['date_id', 'time_id'])
-        # )
-        
+
         self.features = [f'feature_{i:02d}' for i in range(79)]
         if self.include_symbol_id:
             self.features.append('symbol_id')

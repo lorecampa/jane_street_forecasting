@@ -13,6 +13,7 @@ import polars.selectors as cs
 import tensorflow as tf
 import torch as th
 from sklearn.model_selection import BaseCrossValidator
+from tqdm import tqdm
 
 
 
@@ -267,3 +268,36 @@ class CombinatorialPurgedKFold(BaseCrossValidator):
 
             train_indices = np.setdiff1d(train_indices, purge_indices)
             yield train_indices, test_indices
+            
+
+def online_iterator(df: pl.DataFrame, show_progress: bool = True):
+    assert df.select('date_id').n_unique() > 1, 'Dataset must contain at least 2 days'
+    
+    df_date_time_id = df.select('date_id', 'time_id').unique().sort('date_id', 'time_id').with_row_index('date_time_id')
+    df = df.join(df_date_time_id, on=['date_id', 'time_id'], how='left', maintain_order='left').with_row_index('row_id')
+    
+    max_date_time_id = df_date_time_id['date_time_id'].max()
+    min_date_id = df.select('date_id').min().item()
+    
+    responders = [f'responder_{i}' for i in range(9)]
+    
+    curr_idx:int = df_date_time_id.filter(pl.col('date_id').eq(min_date_id + 1))['date_time_id'].min()
+    old_day = min_date_id
+
+    
+    with tqdm(total=max_date_time_id - curr_idx + 1, disable=not show_progress) as pbar:
+        while curr_idx <= max_date_time_id:
+            curr_day = df_date_time_id[curr_idx]['date_id'].item()
+            is_new_day = curr_day != old_day
+            lags = None
+            if is_new_day:
+                lags = df.filter(pl.col('date_id').eq(old_day)).select(pl.col('date_id').add(1), 'time_id', 'symbol_id', *[pl.col(r).alias(f'{r}_lag_1') for r in responders])
+            
+            old_day = curr_day
+
+            batch = df.filter(pl.col('date_time_id').eq(curr_idx)).with_columns(pl.lit(True).alias('is_scored')).drop('date_time_id')
+            
+            yield batch, lags if lags is not None else None
+            
+            curr_idx += 1
+            pbar.update(1)
