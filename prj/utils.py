@@ -306,23 +306,21 @@ def online_iterator(df: pl.DataFrame, show_progress: bool = True):
 def online_iterator_daily(df: pl.DataFrame, show_progress: bool = True):
     assert df.select('date_id').n_unique() > 1, 'Dataset must contain at least 2 days'
     
-    min_date_id = df.select('date_id').min().item()
-
-    df = df.sort('date_id', 'time_id', 'symbol_id').with_row_index('row_id').with_columns(
-        pl.when(pl.col('date_id').gt(min_date_id)).then(pl.lit(True)).otherwise(pl.lit(False)).alias('is_scored')
-    )
+    df = df.sort('date_id', 'time_id', 'symbol_id').with_row_index('row_id').with_columns(pl.lit(True).alias('is_scored'))
     
-    min_date_id = df.select('date_id').min().item()
-    max_date_id = df.select('date_id').max().item()
+    df = df.with_columns(
+        pl.col('date_id').sub(pl.col('date_id').min().add(1))
+    )
+    max_date_id = df['date_id'].max()
+    
     responders = [f'responder_{i}' for i in range(9)]
     
-    curr_date_idx = min_date_id + 1
-    n_dates = df.select('date_id').n_unique()
+    curr_date_idx = 0
+    n_dates = df['date_id'].n_unique()
     
     with tqdm(total=n_dates-1, disable=not show_progress) as pbar:
         while curr_date_idx <= max_date_id:
             lags = df.filter(pl.col('date_id').eq(curr_date_idx-1)).select(pl.col('date_id').add(1), 'time_id', 'symbol_id', *[pl.col(r).alias(f'{r}_lag_1') for r in responders])
-            
             batch = df.filter(pl.col('date_id').eq(curr_date_idx)).drop(*responders)
             
             yield batch, lags

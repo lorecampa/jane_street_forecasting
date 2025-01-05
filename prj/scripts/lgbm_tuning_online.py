@@ -65,7 +65,6 @@ def train_with_es(init_model: lgb.Booster, params: dict, train_df: pl.DataFrame,
     retrain_data = lgb.Dataset(data=X_train, label=y_train, weight=w_train if use_weighted_loss else None)
     
     del X_train, y_train, w_train
-    gc.collect()
     
     X_val, y_val, w_val = build_splits(val_df, features)
     val_retrain_data = lgb.Dataset(data=X_val, label=y_val, weight=w_val if use_weighted_loss else None, reference=retrain_data)
@@ -92,27 +91,30 @@ def train_with_es(init_model: lgb.Booster, params: dict, train_df: pl.DataFrame,
 
 
 def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online_old_dataset: pl.LazyFrame, online_learning_dataset: pl.LazyFrame, features: list, study_name, n_trials, storage):   
-    def obj_function(trial):
+    def obj_function(trial: optuna.Trial):
         logging.info(f'Trial {trial.number}')
+        model = lgb.Booster(model_file=model_file_path)
+        params = model.params.copy()
+        initial_lr = params['learning_rate']
+
         
-        train_every = trial.suggest_int('train_every', 20, 50)
-        last_n_days_es = trial.suggest_int('last_n_days_es', 5, 14)
-        old_data_fraction = trial.suggest_float('old_data_fraction', 0.01, 0.5, step=0.01)
+        train_every = trial.suggest_int('train_every', 10, 50)
+        # last_n_days_es = trial.suggest_int('last_n_days_es', 5, 14)
+        # old_data_fraction = trial.suggest_float('old_data_fraction', 0.01, 0.5, step=0.01)
         
         
         use_weighted_loss = trial.suggest_categorical('use_weighted_loss', [True, False])
         metric = None
         es_patience=20
-        decay_lr_once = trial.suggest_categorical('decay_lr_once', [True, False])
-        lr_decay = trial.suggest_float('lr_decay', 0.1, 0.9)
-
+        # decay_lr_once = trial.suggest_categorical('decay_lr_once', [True, False])
+        # lr_decay = trial.suggest_float('lr_decay', 0.1, 0.9)
+        lr_decay = 0.9
+        learning_rate = trial.suggest_float('learning_rate', LR_LOWER_BOUND, initial_lr * lr_decay, log=True)
         
         tmp_checkpoint_dir = os.path.join(output_dir, f'trial_{trial.number}')
         os.makedirs(tmp_checkpoint_dir)
 
-        model = lgb.Booster(model_file=model_file_path)
-        params = model.params.copy()
-        initial_lr = params['learning_rate']
+        
     
         
         y_hat = []
@@ -128,6 +130,7 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
         new_dataset: typing.Optional[pl.DataFrame] = None
         old_dataset: pl.DataFrame = online_old_dataset.collect()
         
+        step = 0
         for i in range(0, len(date_ids), batch_size):
             batch_online_learning_dataset = online_learning_dataset.filter(pl.col('date_id').is_between(date_ids[i], date_ids[min(i+batch_size, len(date_ids))-1])).collect()
             n_batch_days = batch_online_learning_dataset['date_id'].n_unique()
@@ -136,31 +139,35 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
             
                 if (date_idx + 1) % train_every == 0:                
                     max_date = new_dataset['date_id'].max()
-                    new_validation_dataset = new_dataset.filter(pl.col('date_id') > max_date - last_n_days_es)
-                    new_training_dataset = new_dataset.filter(pl.col('date_id') <= max_date - last_n_days_es)
+                    split_point = max_date
+                    new_validation_dataset = new_dataset.filter(pl.col('date_id').gt(split_point))
+                    new_training_dataset = new_dataset.filter(pl.col('date_id').le(split_point))
                     
                     
                     if verbose:
                         old_days = old_dataset['date_id'].unique().sort().to_list()
-                        train_days = new_training_dataset['date_id'].unique().sort().to_list()
-                        val_days = new_validation_dataset['date_id'].unique().sort().to_list()
                         print('Old days: ', old_days)
+             
+                    
+                    train_df = new_training_dataset
+                    max_old_dataset_date = old_dataset['date_id'].max()
+                    gap = 1
+                    n_train_days = train_df['date_id'].n_unique()
+                    es_ratio = 0.2
+                    n_es_days = int(es_ratio * n_train_days)
+                    
+                    val_df = old_dataset.filter(pl.col('date_id').is_between(max_old_dataset_date-n_es_days - gap, max_old_dataset_date-gap))
+                    
+                    if verbose:
+                        train_days = train_df['date_id'].unique().sort().to_list()
+                        val_days = val_df['date_id'].unique().sort().to_list()
                         print('Train days: ', train_days)
                         print('Val days: ', val_days)
-                    
-                    new_training_dataset_len = new_training_dataset.shape[0]
-                    old_dataset_len = old_dataset.shape[0]
-                    old_data_len = min(int(old_data_fraction * new_training_dataset_len / (1 - old_data_fraction)), old_dataset_len)
-                    
-                    train_df = pl.concat([old_dataset.sample(n=old_data_len), new_training_dataset])
-                    val_df = new_validation_dataset
+                        
                     
                     logging.info(f'Starting fine tuning at date {date_id}')
 
-                    if decay_lr_once:
-                        params['learning_rate'] = max(initial_lr * lr_decay, LR_LOWER_BOUND)
-                    else:
-                        params['learning_rate'] = max(params['learning_rate'] * lr_decay, LR_LOWER_BOUND)
+                    params['learning_rate'] = max(learning_rate, LR_LOWER_BOUND)
                     
                     model = train_with_es(
                         init_model= model, 
@@ -194,7 +201,10 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
                 y_hat.append(preds)
                 y.append(test_.select(['responder_6']).to_numpy().flatten())
                 weights.append(test_.select(['weight']).to_numpy().flatten())
-                daily_r2.append(r2_score(y_pred=preds, y_true=y[-1], sample_weight=weights[-1]))
+                daily_score = r2_score(y_pred=preds, y_true=y[-1], sample_weight=weights[-1])
+                daily_r2.append(daily_score)
+                
+                step += 1
             
         y_hat = np.concatenate(y_hat)
         y = np.concatenate(y)
@@ -252,6 +262,7 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
         
         return total_score, total_sharpe
     
+    
     study = optuna.create_study(directions=['maximize', 'maximize'], study_name=study_name, storage=storage, load_if_exists=True)    
     study.optimize(obj_function, n_trials=n_trials)
     return study.trials_dataframe()
@@ -288,7 +299,14 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     old_dataset = old_dataset.select(AUX_COLS + features)
     online_learning_dataset = online_learning_dataset.select(AUX_COLS + features)
     
-    model_file_path = "/home/lorecampa/projects/jane_street_forecasting/experiments/lgbm_offline/lgbm_offline_2025-01-04_16-04-39/trial_0/best_model.txt"
+    model_study_name = "lgbm_offline_2025-01-04_19-42-20"
+    model_storage = "mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet"
+    study = optuna.load_study(study_name=model_study_name, storage=model_storage)
+    print(f'Loaded study {model_study_name} from {model_storage} with {len(study.trials)} trials')
+    best_trial = max(study.best_trials, key=lambda t: t.values[0]) # highest r2
+
+
+    model_file_path = f'/home/lorecampa/projects/jane_street_forecasting/experiments/lgbm_offline/{model_study_name}/trial_{best_trial.number}/best_model.txt'
     model = lgb.Booster(model_file=model_file_path)
     
     # Offline scores
