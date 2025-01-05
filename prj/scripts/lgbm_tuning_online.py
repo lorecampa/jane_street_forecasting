@@ -27,6 +27,7 @@ MAX_BOOST_ROUNDS = 1000
 OLD_DATASET_MAX_HISTORY = 30
 LOG_PERIOD=50
 LR_LOWER_BOUND=1e-5
+
 verbose=True
 
 
@@ -95,28 +96,25 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
         logging.info(f'Trial {trial.number}')
         model = lgb.Booster(model_file=model_file_path)
         params = model.params.copy()
-        initial_lr = params['learning_rate']
+        initial_model_lr = params['learning_rate']
 
         
         train_every = trial.suggest_int('train_every', 10, 50)
+        es_ratio = trial.suggest_float('es_ratio', 0.1, 0.4, step=0.05)
         # last_n_days_es = trial.suggest_int('last_n_days_es', 5, 14)
-        # old_data_fraction = trial.suggest_float('old_data_fraction', 0.01, 0.5, step=0.01)
-        
+        old_data_fraction = trial.suggest_float('old_data_fraction', 0.01, 0.5, step=0.01)
         
         use_weighted_loss = trial.suggest_categorical('use_weighted_loss', [True, False])
         metric = None
         es_patience=20
         # decay_lr_once = trial.suggest_categorical('decay_lr_once', [True, False])
-        # lr_decay = trial.suggest_float('lr_decay', 0.1, 0.9)
-        lr_decay = 0.9
-        learning_rate = trial.suggest_float('learning_rate', LR_LOWER_BOUND, initial_lr * lr_decay, log=True)
+        lr_decay = trial.suggest_float('lr_decay', 0.1, 0.9)
+        initial_lr = trial.suggest_float('initial_learning_rate', LR_LOWER_BOUND, initial_model_lr, log=True)
+        params['learning_rate'] = initial_lr
         
         tmp_checkpoint_dir = os.path.join(output_dir, f'trial_{trial.number}')
         os.makedirs(tmp_checkpoint_dir)
 
-        
-    
-        
         y_hat = []
         y = []
         weights = []
@@ -138,36 +136,32 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
                 date_id = date_id[0]
             
                 if (date_idx + 1) % train_every == 0:                
-                    max_date = new_dataset['date_id'].max()
-                    split_point = max_date
-                    new_validation_dataset = new_dataset.filter(pl.col('date_id').gt(split_point))
-                    new_training_dataset = new_dataset.filter(pl.col('date_id').le(split_point))
+                    new_training_dataset = new_dataset
+                    new_validation_dataset = new_dataset.clear()
+                                        
+                    train_df = new_training_dataset
+                    min_train_date = train_df['date_id'].min()
+                
+                    n_train_days = train_df['date_id'].n_unique()
+                    n_es_days = max(1, int(es_ratio * n_train_days))
+                    split_point = min_train_date + n_es_days
                     
+                    val_df = train_df.filter(pl.col('date_id').lt(split_point))
+                    train_df = train_df.filter(pl.col('date_id').ge(split_point))
                     
+                        
                     if verbose:
                         old_days = old_dataset['date_id'].unique().sort().to_list()
-                        print('Old days: ', old_days)
-             
-                    
-                    train_df = new_training_dataset
-                    max_old_dataset_date = old_dataset['date_id'].max()
-                    gap = 1
-                    n_train_days = train_df['date_id'].n_unique()
-                    es_ratio = 0.2
-                    n_es_days = int(es_ratio * n_train_days)
-                    
-                    val_df = old_dataset.filter(pl.col('date_id').is_between(max_old_dataset_date-n_es_days - gap, max_old_dataset_date-gap))
-                    
-                    if verbose:
                         train_days = train_df['date_id'].unique().sort().to_list()
                         val_days = val_df['date_id'].unique().sort().to_list()
                         print('Train days: ', train_days)
                         print('Val days: ', val_days)
+                        print('Old days: ', old_days)
                         
                     
                     logging.info(f'Starting fine tuning at date {date_id}')
 
-                    params['learning_rate'] = max(learning_rate, LR_LOWER_BOUND)
+                    params['learning_rate'] = max(params['learning_rate'] * lr_decay, LR_LOWER_BOUND)
                     
                     model = train_with_es(
                         init_model= model, 

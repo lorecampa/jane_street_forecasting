@@ -78,7 +78,7 @@ def _sample_catboost_params(trial: optuna.Trial, additional_args: dict = {}) -> 
             
     return params
 
-def train(init_model: CatBoostRegressor, params: dict, train_dl: pl.LazyFrame, val_dl: pl.LazyFrame, use_weighted_loss, metric, output_dir, es_patience, features):
+def train(params: dict, train_dl: pl.LazyFrame, val_dl: pl.LazyFrame, use_weighted_loss, metric, output_dir, es_patience, features):
     start_time = time.time()
     _params = params.copy()
     
@@ -104,7 +104,6 @@ def train(init_model: CatBoostRegressor, params: dict, train_dl: pl.LazyFrame, v
     
     model.fit(
         train_pool,
-        init_model=init_model,
         eval_set=val_pool if EARLY_STOPPING else None,
         early_stopping_rounds=es_patience if EARLY_STOPPING else None,
     )
@@ -147,7 +146,6 @@ def optimize_parameters(output_dir, pretrain_dataset: pl.LazyFrame, pretrain_es_
         
          
         model, initial_wr2_score = train(
-            init_model=None, 
             train_dl=pretrain_dataset,
             val_dl=pretrain_es_dataset if pretrain_es_dataset else None,
             use_weighted_loss=use_weighted_loss,
@@ -208,8 +206,8 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     config = DataConfig(**data_args)
     loader = DataLoader(data_dir=dataset_path, config=config)
     
-    pretraining_dataset = loader.load_with_partition(5, 7)
-    # pretraining_dataset = loader.load(1000, 1130)
+    # pretraining_dataset = loader.load_with_partition(5, 7)
+    pretraining_dataset = loader.load(1000, 1130)
     
     features = loader.features
     print(f'Loaded features: {features}')
@@ -221,8 +219,8 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
         pretrain_es_dataset = pretraining_dataset.filter(pl.col('date_id') > max_date - 14)
         pretraining_dataset = pretraining_dataset.filter(pl.col('date_id') <= max_date - 14)
 
-    evaluation_dataset = loader.load_with_partition(8, 9)
-    # evaluation_dataset = loader.load(1131, 1200)
+    # evaluation_dataset = loader.load_with_partition(8, 9)
+    evaluation_dataset = loader.load(1131, 1200)
     
     evaluation_dataset = evaluation_dataset.select(AUX_COLS + features)
     
