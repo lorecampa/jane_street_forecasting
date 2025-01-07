@@ -58,7 +58,11 @@ class OAMP:
         is_new_group: bool = False,
     ):
         # Updating agents' losses
-        self.agents_losses.append(agents_losses)
+        if agents_losses.ndim == 1:
+            agents_losses = agents_losses.reshape(1, -1)
+        
+        for agents_loss in agents_losses:
+            self.agents_losses.append(agents_loss)
         
         if is_new_group: # New group
             self.group_t += 1
@@ -129,21 +133,34 @@ class OAMP:
     def load(path: str) -> 'OAMP':
         return joblib.load(os.path.join(path, 'class.joblib'))
 
+        
     def compute_prediction(
         self,
         agent_predictions: np.ndarray,
     ) -> np.ndarray:
+        p_tm1 = np.array(self.p_tm1)
+
         if self.agg_type == "max":
-            return agent_predictions[np.argmax(self.p_tm1)]
+            max_idx = np.argmax(p_tm1)
+            return agent_predictions[..., max_idx]
+
         elif self.agg_type == "mean":
-            return np.sum(agent_predictions * self.p_tm1) / np.sum(self.p_tm1) 
+            weighted_sum = np.dot(agent_predictions, p_tm1)
+            total_weight = np.sum(p_tm1)
+            return weighted_sum / total_weight
+
         elif self.agg_type == "median":
-            sorted_indices = np.argsort(agent_predictions)
-            sorted_agent_predictions = agent_predictions[sorted_indices]
-            sorted_weights = self.p_tm1[sorted_indices]
-            cumulative_weights = np.cumsum(sorted_weights)
-            total_weight = np.sum(self.p_tm1)
-            return sorted_agent_predictions[np.searchsorted(cumulative_weights, total_weight / 2)]
+            sorted_indices = np.argsort(agent_predictions, axis=-1)
+            sorted_agent_predictions = np.take_along_axis(agent_predictions, sorted_indices, axis=-1)
+            sorted_weights = np.take_along_axis(np.tile(p_tm1, (agent_predictions.shape[0], 1)),
+                                                sorted_indices, axis=-1)
+
+            cumulative_weights = np.cumsum(sorted_weights, axis=-1)
+            total_weight = np.sum(p_tm1)
+            median_indices = np.apply_along_axis(
+                lambda x: np.searchsorted(x, total_weight / 2), axis=-1, arr=cumulative_weights
+            )
+            return np.take_along_axis(sorted_agent_predictions, median_indices[:, None], axis=-1).squeeze()
         else:
             raise ValueError(f"Unknown aggregation type: {self.agg_type}")
             

@@ -9,4 +9,5 @@ python prj/scripts/catboost_tuning.py \
 
 python prj/scripts/lgbm_tuning.py \
     -storage mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet \
-    -n_trials 200
+    -n_trials 200 \
+    -study_name lgbm_offline_2025-01-04_19-42-20

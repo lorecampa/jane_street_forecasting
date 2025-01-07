@@ -23,7 +23,6 @@ LOGGING_FORMATTER = "%(asctime)s:%(name)s:%(levelname)s: %(message)s"
 AUX_COLS = ['date_id', 'time_id', 'symbol_id', 'weight', 'responder_6', 'partition_id']
 
 MAX_BOOST_ROUNDS = 1000
-OLD_DATASET_MAX_HISTORY = 30
 LOG_PERIOD=50
 verbose=False
 EARLY_STOPPING = False
@@ -104,17 +103,22 @@ def train(params: dict, train_dl: pl.LazyFrame, val_dl: pl.LazyFrame, use_weight
     if metric is not None:
         _params['metric'] = metric
     
-    # X_train, y_train, w_train = build_splits(train_dl, features)
-    # train_data = lgb.Dataset(data=X_train, label=y_train, weight=w_train if use_weighted_loss else None)
-    # del X_train, y_train, w_train
-    # gc.collect()
+    X_train, y_train, w_train = build_splits(train_dl, features)
+    train_data = lgb.Dataset(data=X_train, label=y_train, weight=w_train if use_weighted_loss else None)
+    del X_train, y_train, w_train
+    gc.collect()
     
-    print('Loading binary file')
-    binary_path = "/home/lorecampa/projects/jane_street_forecasting/dataset/binary/lgbm_maxbin_63_4_7.bin"
-    train_data =lgb.Dataset(data=binary_path, params={
-        'feature_pre_filter': False,
-    })
-    logging.info('Binary file loaded')
+    # print('Loading binary file')
+    # binary_name = 'lgbm_maxbin_63_0_7'
+    # if use_weighted_loss:
+    #     binary_name += '_w'
+    
+    # binary_path = f"/home/lorecampa/projects/jane_street_forecasting/dataset/binary/{binary_name}.bin"
+    # train_data =lgb.Dataset(data=binary_path, params={
+    #     'feature_pre_filter': False,
+    #     'device': 'cpu'
+    # })
+    # logging.info('Binary file loaded')
 
     
     callbacks = []
@@ -123,8 +127,11 @@ def train(params: dict, train_dl: pl.LazyFrame, val_dl: pl.LazyFrame, use_weight
         callbacks += [lgb.early_stopping(stopping_rounds=es_patience), lgb.log_evaluation(period=LOG_PERIOD)]
     else:
         # Dummy eval set to log the training progress, cannot find other way to log the training status
-        first_val_date: int = val_dl.select(pl.col('date_id').min()).collect().item()
-        X_val, y_val, w_val = build_splits(val_dl.filter(pl.col('date_id').eq(first_val_date)).limit(1000), features)
+        n_dummy_samples = 100        
+        X_val = np.random.rand(n_dummy_samples, len(features))
+        y_val = np.random.rand(n_dummy_samples)
+        w_val = np.random.rand(n_dummy_samples)
+        
         callbacks += [lgb.log_evaluation(period=LOG_PERIOD)]
     
     val_data = lgb.Dataset(data=X_val, label=y_val, weight=w_val if use_weighted_loss else None, reference=train_data)
@@ -244,13 +251,12 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     config = DataConfig(**data_args)
     loader = DataLoader(data_dir=dataset_path, config=config)
     
-    # pretraining_dataset = loader.load_with_partition(5, 7)
-    # pretraining_dataset = loader.load(1000, 1150)
+    pretraining_dataset = loader.load_with_partition(0, 7)
+    # pretraining_dataset = loader.load(1100, 1150)
+    features = loader.features
     
+    pretraining_dataset = pretraining_dataset.select(AUX_COLS + features)
     
-    # pretraining_dataset = pretraining_dataset.select(AUX_COLS + features)
-    
-    pretraining_dataset = None
     
     pretrain_es_dataset = None
     if EARLY_STOPPING:
@@ -261,7 +267,7 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     evaluation_dataset = loader.load_with_partition(8, 9)
     # evaluation_dataset = loader.load(1151, 1200)
     
-    features = loader.features
+    # features = loader.features
     print(f'Loaded features: {features}')
     
     evaluation_dataset = evaluation_dataset.select(AUX_COLS + features)

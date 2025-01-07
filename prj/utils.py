@@ -529,3 +529,18 @@ class LGBMEarlyStoppingCallbackWithTimeout:
                 raise EarlyStopException(self.best_iter[i], self.best_score_list[i])
             
             self._final_iteration_check(env, eval_name_splitted, i)
+            
+            
+from contextlib import contextmanager
+import signal
+
+@contextmanager
+def timeout(duration):
+    def timeout_handler(signum, frame):
+        raise TimeoutError(f'block timedout after {duration} seconds')
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(duration)
+    try:
+        yield
+    finally:
+        signal.alarm(0)

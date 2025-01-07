@@ -1,7 +1,9 @@
 
 import time
 import typing
+from line_profiler import profile
 from sklearn.metrics import r2_score
+from sklearn.model_selection import train_test_split
 import torch
 from tqdm import tqdm
 
@@ -18,12 +20,12 @@ import numpy as np
 import gc
 from pathlib import Path
 
-from prj.utils import LGBMEarlyStoppingCallbackWithTimeout
+from prj.utils import LGBMEarlyStoppingCallbackWithTimeout, timeout
 
 LOGGING_FORMATTER = "%(asctime)s:%(name)s:%(levelname)s: %(message)s"
 AUX_COLS = ['date_id', 'time_id', 'symbol_id', 'weight', 'responder_6', 'partition_id']
 
-MAX_BOOST_ROUNDS = 1000
+MAX_BOOST_ROUNDS = 500
 OLD_DATASET_MAX_HISTORY = 30
 LOG_PERIOD=50
 LR_LOWER_BOUND=1e-5
@@ -55,9 +57,10 @@ METRIC_FN_DICT = {
 
 
 def train_with_es(init_model: lgb.Booster, params: dict, train_df: pl.DataFrame, val_df: pl.DataFrame, use_weighted_loss, metric, output_dir, es_patience, features):
-    start_time = time.time()
     _params = params.copy()
     _params.pop('num_iterations', None)
+    
+    early_stopping = val_df.shape[0] > 0
     
     if metric is not None:
         _params['metric'] = metric
@@ -67,50 +70,79 @@ def train_with_es(init_model: lgb.Booster, params: dict, train_df: pl.DataFrame,
     
     del X_train, y_train, w_train
     
-    X_val, y_val, w_val = build_splits(val_df, features)
-    val_retrain_data = lgb.Dataset(data=X_val, label=y_val, weight=w_val if use_weighted_loss else None, reference=retrain_data)
-
-    callbacks = [LGBMEarlyStoppingCallbackWithTimeout(es_patience, timeout_seconds=50), lgb.log_evaluation(period=LOG_PERIOD)]
+    
+    callbacks = []
+    if early_stopping:
+        X_val, y_val, w_val = build_splits(val_df, features)
+        val_retrain_data = lgb.Dataset(data=X_val, label=y_val, weight=w_val if use_weighted_loss else None, reference=retrain_data)
+        callbacks += [LGBMEarlyStoppingCallbackWithTimeout(es_patience, timeout_seconds=50), lgb.log_evaluation(period=LOG_PERIOD)]
+        del X_val, y_val, w_val
     
         
     print(f"Learning rate: {_params['learning_rate']:e}")
     model = lgb.train(
         _params, 
         train_set=retrain_data, 
-        num_boost_round=MAX_BOOST_ROUNDS, 
+        num_boost_round=MAX_BOOST_ROUNDS if early_stopping else 200, 
         init_model=init_model, 
-        valid_sets=[val_retrain_data], 
+        valid_sets=[val_retrain_data] if early_stopping else None, 
         callbacks=callbacks,
+        keep_training_booster=True,
         feval=METRIC_FN_DICT[metric] if metric in METRIC_FN_DICT else None
     )
-    logging.info(f'Train completed in {((time.time() - start_time)/60):.3f} minutes')
      
     save_path = os.path.join(output_dir, 'best_model.txt')
     model.save_model(save_path)
     
     return model
 
+def refit(model: lgb.Booster, train_df: pl.DataFrame, use_weighted_loss, features, decay_rate=0.9):
+    start_time = time.time()
+    X_train, y_train, w_train = build_splits(train_df, features)
+    
+    model = model.refit(
+        data=X_train,
+        label=y_train,
+        weight=w_train if use_weighted_loss else None,
+        decay_rate=decay_rate,
+    )
+    
+    print(f'Refit completed in {((time.time() - start_time)/60):.3f} minutes')
+    
+    return model
+
 
 def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online_old_dataset: pl.LazyFrame, online_learning_dataset: pl.LazyFrame, features: list, study_name, n_trials, storage):   
+    
     def obj_function(trial: optuna.Trial):
         logging.info(f'Trial {trial.number}')
         model = lgb.Booster(model_file=model_file_path)
         params = model.params.copy()
-        initial_model_lr = params['learning_rate']
+        # initial_model_lr = params['learning_rate']
 
         
-        train_every = trial.suggest_int('train_every', 10, 50)
-        es_ratio = trial.suggest_float('es_ratio', 0.1, 0.4, step=0.05)
-        # last_n_days_es = trial.suggest_int('last_n_days_es', 5, 14)
-        old_data_fraction = trial.suggest_float('old_data_fraction', 0.01, 0.5, step=0.01)
+        refit_every = trial.suggest_int('train_every', 5, 40)
+        refit_decay_rate = trial.suggest_float('refit_decay_rate', 0.8, 0.95, step=0.01)
+        retrain_every_n_refit = trial.suggest_int('retrain_every_n_refit', 5, 10, step=1)
+        retrain_every = int(retrain_every_n_refit * refit_every)
         
+        old_data_fraction = trial.suggest_float('old_data_fraction', 0., 0.7, step=0.05)
+        # train_val_fraction = trial.suggest_float('train_val_fraction', 0.2, 0.8, step=0.05)
+        # train_val_fraction = 0.2
         use_weighted_loss = trial.suggest_categorical('use_weighted_loss', [True, False])
         metric = None
         es_patience=20
-        # decay_lr_once = trial.suggest_categorical('decay_lr_once', [True, False])
-        lr_decay = trial.suggest_float('lr_decay', 0.1, 0.9)
-        initial_lr = trial.suggest_float('initial_learning_rate', LR_LOWER_BOUND, initial_model_lr, log=True)
-        params['learning_rate'] = initial_lr
+        lr_decay = 0.8
+        # lr_decay = trial.suggest_float('lr_decay', 0.1, 0.99, step=0.05)
+        # initial_lr = trial.suggest_float('initial_learning_rate', LR_LOWER_BOUND, initial_model_lr, log=True)
+        
+        # params['learning_rate'] = initial_model_lr
+        
+        # es_mode = trial.suggest_categorical('es_mode', ['holdout_first', 'holdout_last', 'random_days', 'random_samples', 'None'])
+        es_mode = 'holdout_first'
+        es_ratio = 0.1
+        # if es_mode != 'None':
+        #     es_ratio = trial.suggest_float('es_ratio', 0.1, 0.4, step=0.05)
         
         tmp_checkpoint_dir = os.path.join(output_dir, f'trial_{trial.number}')
         os.makedirs(tmp_checkpoint_dir)
@@ -121,70 +153,133 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
         daily_r2 = []
             
         date_idx = 0
-        date_ids = online_learning_dataset.select('date_id').collect().to_series().unique().sort().to_list()
+        online_dataset = online_learning_dataset.clone()
+        date_ids = online_dataset.select('date_id').collect().to_series().unique().sort().to_list()
         batch_size = 500
         
         
         new_dataset: typing.Optional[pl.DataFrame] = None
         old_dataset: pl.DataFrame = online_old_dataset.collect()
+                
+        n_timeout_reached = 0        
         
         step = 0
         for i in range(0, len(date_ids), batch_size):
-            batch_online_learning_dataset = online_learning_dataset.filter(pl.col('date_id').is_between(date_ids[i], date_ids[min(i+batch_size, len(date_ids))-1])).collect()
+            batch_online_learning_dataset = online_dataset.filter(pl.col('date_id').is_between(date_ids[i], date_ids[min(i+batch_size, len(date_ids))-1])).collect()
             n_batch_days = batch_online_learning_dataset['date_id'].n_unique()
             for date_id, test in tqdm(batch_online_learning_dataset.group_by('date_id', maintain_order=True), total=n_batch_days, desc=f'Batch {i}: Predicting online'):
-                date_id = date_id[0]
-            
-                if (date_idx + 1) % train_every == 0:                
-                    new_training_dataset = new_dataset
-                    new_validation_dataset = new_dataset.clear()
-                                        
-                    train_df = new_training_dataset
-                    min_train_date = train_df['date_id'].min()
+                start_pred_time = time.time()
                 
-                    n_train_days = train_df['date_id'].n_unique()
-                    n_es_days = max(1, int(es_ratio * n_train_days))
-                    split_point = min_train_date + n_es_days
+                date_id = date_id[0]
+                should_retrain = (date_idx + 1) % retrain_every == 0
+                should_refit = (date_idx + 1) % refit_every == 0
+                if should_retrain or should_refit:
+                    train_val_df = new_dataset
+                    # train_val_df = new_dataset.group_by('date_id', 'symbol_id').agg(
+                    #     pl.all().sample(fraction=train_val_fraction)
+                    # )
+                    # train_val_df = train_val_df\
+                    #     .explode(train_val_df.columns[2:])\
+                    #     .sort('date_id', 'time_id', 'symbol_id')\
+                    #     .select(new_dataset.columns)
                     
-                    val_df = train_df.filter(pl.col('date_id').lt(split_point))
-                    train_df = train_df.filter(pl.col('date_id').ge(split_point))
                     
+                    train_val_days = train_val_df['date_id'].unique().sort().to_numpy()     
+                    len_train_val_days = len(train_val_days) 
+                    
+                    if es_mode in ['random_days', 'holdout_first', 'holdout_last']:
+                        if es_mode == 'random_days':
+                            train_days, val_days = train_test_split(train_val_days, test_size=es_ratio)
+                        elif es_mode == 'holdout_first':
+                            split_point = max(int(len_train_val_days * es_ratio), 1)
+                            val_days = train_val_days[:split_point]
+                            train_days = train_val_days[split_point:]
+                        elif es_mode == 'holdout_last':
+                            split_point = max(int(len_train_val_days * es_ratio), 1)
+                            val_days = train_val_days[-split_point:]
+                            train_days = train_val_days[:-split_point]
+                            
+                        val_df = train_val_df.filter(pl.col('date_id').is_in(val_days))
+                        train_df = train_val_df.filter(pl.col('date_id').is_in(train_days))
+                    elif es_mode == 'random_samples':
+                        np.random.seed()
+                        shuffled_indices = np.random.permutation(len(train_val_df))
+                        split_index = int(len(train_val_df) * (1 - es_ratio))
+                        train_indices = shuffled_indices[:split_index]
+                        val_indices = shuffled_indices[split_index:]
                         
+                        val_df = train_val_df[val_indices]
+                        train_df = train_val_df[train_indices]
+                        
+                    elif es_mode == 'None':
+                        train_df = train_val_df
+                        val_df = train_val_df.clear()
+                    
+                    else:
+                        raise ValueError(f'Unknown es_mode: {es_mode}')
+                    
+                    
                     if verbose:
                         old_days = old_dataset['date_id'].unique().sort().to_list()
                         train_days = train_df['date_id'].unique().sort().to_list()
                         val_days = val_df['date_id'].unique().sort().to_list()
+                        print('Old days: ', old_days)
                         print('Train days: ', train_days)
                         print('Val days: ', val_days)
-                        print('Old days: ', old_days)
+                        print(train_df.shape, val_df.shape)
+                    
+                    if old_data_fraction > 0:
+                        unique_train_val_symbols = train_val_df['symbol_id'].unique().to_list()
+            
+                        train_df_len = train_df.shape[0]
+                        old_dataset_len = old_dataset.shape[0]
+                        old_data_len = min(int(old_data_fraction * train_df_len / (1 - old_data_fraction)), old_dataset_len)
+                        if verbose:
+                            print(f"Adding {old_data_len} old data samples to training set, {old_data_fraction * 100:.2f}% of the current training set")
+                        
+                        train_df = old_dataset.filter(pl.col('symbol_id').is_in(unique_train_val_symbols))\
+                            .sample(n=old_data_len)\
+                            .vstack(train_df)
                         
                     
-                    logging.info(f'Starting fine tuning at date {date_id}')
+                    if should_retrain:
+                        logging.info(f'Starting RETRAIN at date {date_id}')
 
-                    params['learning_rate'] = max(params['learning_rate'] * lr_decay, LR_LOWER_BOUND)
-                    
-                    model = train_with_es(
-                        init_model= model, 
-                        train_df=train_df,
-                        val_df=val_df,
-                        use_weighted_loss=use_weighted_loss,
-                        metric=metric,
-                        es_patience=es_patience,
-                        params=params,
-                        output_dir=tmp_checkpoint_dir,
-                        features=features
-                    )
-                                        
-                    max_old_dataset_date = new_training_dataset['date_id'].max()
+                        params['learning_rate'] = max(params['learning_rate'] * lr_decay, LR_LOWER_BOUND)
+                        model = train_with_es(
+                            init_model= model, 
+                            train_df=train_df,
+                            val_df=val_df,
+                            use_weighted_loss=use_weighted_loss,
+                            metric=metric,
+                            es_patience=es_patience,
+                            params=params,
+                            output_dir=tmp_checkpoint_dir,
+                            features=features
+                        )
+                        logging.info(f'RETRAIN completed in {(time.time() - start_pred_time)/60:.4f} minutes')
+                    else:
+                        logging.info(f'Starting REFIT at date {date_id}')
+                        with timeout(52):
+                            try:
+                                model = refit(model, train_val_df, use_weighted_loss, features, decay_rate=refit_decay_rate)
+                            except TimeoutError as e:
+                                print('Timeout reached during refit')
+                                n_timeout_reached += 1
+                                
+                        logging.info(f'REFIT completed in {(time.time() - start_pred_time)/60:.4f} minutes')
+
+                                     
+                    max_old_dataset_date = new_dataset['date_id'].max()
                     old_dataset = pl.concat([
                         old_dataset,
-                        new_training_dataset
+                        new_dataset
                     ]).filter(
                         pl.col('date_id').is_between(max_old_dataset_date-OLD_DATASET_MAX_HISTORY, max_old_dataset_date)
                     )
-                    new_dataset = new_validation_dataset
-
-
+                    new_dataset = None
+                    
+                    
                 date_idx += 1
                 test_ = test.select(AUX_COLS + features)
                 new_dataset = test_ if new_dataset is None else new_dataset.vstack(test_)
@@ -199,14 +294,26 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
                 daily_r2.append(daily_score)
                 
                 step += 1
-            
+                
+                # total_pred_time = time.time() - start_pred_time
+                # logging.info(f'Predict completed in {total_pred_time/60:.4f} minutes')
+                # if total_pred_time > 60:
+                #     n_timeout_reached += 1
+                #     logging.info(f'Timeout reached {n_timeout_reached}/{n_online_retrain} times')
+                #     if n_timeout_reached > int(n_online_retrain * 0.3):
+                #         logging.info(f'Timeout reached {n_timeout_reached} times. Pruning trial...')
+                #         raise optuna.TrialPruned()
+        
+        logging.info(f'Online learning completed, reached {n_timeout_reached} timeouts')
+        trial.set_user_attr('n_timeout_reached', n_timeout_reached)
+         
         y_hat = np.concatenate(y_hat)
         y = np.concatenate(y)
         weights = np.concatenate(weights)
         daily_r2 = np.array(daily_r2)
         
-        partitions = online_learning_dataset.select('partition_id').unique().collect().to_series().sort().to_list()
-        partition_index_df = online_learning_dataset.select('partition_id', 'date_id').with_row_index('index').collect()
+        partitions = online_dataset.select('partition_id').unique().collect().to_series().sort().to_list()
+        partition_index_df = online_dataset.select('partition_id', 'date_id').with_row_index('index').collect()
         
         partition_scores = []
         partition_sharpes = []
@@ -254,6 +361,8 @@ def optimize_parameters(model_file_path: str, y_pred_offline, output_dir, online
                 
         logging.info(f'Total -> [offline_r2={total_score_offline:.4f}, r2={total_score:.4f}, sharpe_ratio={total_sharpe:.4f}, stability={total_stability_index:.4f}, gain={(total_score - total_score_offline):.4f}]')
         
+        model.save_model(os.path.join(tmp_checkpoint_dir, 'model.txt'))
+        
         return total_score, total_sharpe
     
     
@@ -296,17 +405,19 @@ def main(dataset_path, output_dir, study_name, n_trials, storage):
     model_study_name = "lgbm_offline_2025-01-04_19-42-20"
     model_storage = "mysql+pymysql://admin:F1g5w#6zP4TN@janestreet.c3uaekuseqse.us-east-1.rds.amazonaws.com/janestreet"
     study = optuna.load_study(study_name=model_study_name, storage=model_storage)
-    print(f'Loaded study {model_study_name} from {model_storage} with {len(study.trials)} trials')
     best_trial = max(study.best_trials, key=lambda t: t.values[0]) # highest r2
 
+    print(f'Loaded study {model_study_name} from {model_storage} with {len(study.trials)} trials. Best trial number: {best_trial.number}')
 
-    model_file_path = f'/home/lorecampa/projects/jane_street_forecasting/experiments/lgbm_offline/{model_study_name}/trial_{best_trial.number}/best_model.txt'
+
+    model_file_path = f'/home/lorecampa/projects/jane_street_forecasting/dataset/models/lgbm_maxbin_63_0_7_w.txt'
     model = lgb.Booster(model_file=model_file_path)
     
     # Offline scores
     X_online = online_learning_dataset.select(features).collect().to_numpy()
     y_pred_offline = []
     pred_batch_size = 1000000
+    
     for i in tqdm(range(0, X_online.shape[0], pred_batch_size), desc='Predicting offline'):
         y_pred_offline.append(model.predict(X_online[i:i+pred_batch_size]).clip(-5, 5).flatten())
     
@@ -355,7 +466,7 @@ if __name__ == '__main__':
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     model_name = f'lgbm_online_tuning_{timestamp}' if STUDY_NAME is None else STUDY_NAME
     output_dir = os.path.join(OUTPUT_DIR, model_name)
-    os.makedirs(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
     
     if STUDY_NAME is None:
         STUDY_NAME = model_name
