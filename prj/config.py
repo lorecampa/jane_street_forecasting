@@ -16,3 +16,4 @@ if data_dir_env:
     DATA_DIR = Path(data_dir_env)
 else:
     DATA_DIR = ROOT_DIR / 'dataset'
+

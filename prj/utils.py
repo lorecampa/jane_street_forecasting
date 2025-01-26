@@ -227,8 +227,7 @@ class BlockingTimeSeriesSplit():
     def get_n_splits(self, groups):
         return self.n_splits
     
-    def split(self, X, y=None, groups=None):
-        n_samples = len(X)
+    def split(self, n_samples: int):
         k_fold_size = n_samples // self.n_splits
         indices = np.arange(n_samples)
     
@@ -272,14 +271,21 @@ class CombinatorialPurgedKFold(BaseCrossValidator):
 
 def online_iterator(df: pl.DataFrame, show_progress: bool = True):
     assert df.select('date_id').n_unique() > 1, 'Dataset must contain at least 2 days'
-    
+    df = df.with_columns(
+        pl.col('date_id').sub(pl.col('date_id').min().add(1))
+    )
+    responders = [f'responder_{i}' for i in range(9)]
+
     df_date_time_id = df.select('date_id', 'time_id').unique().sort('date_id', 'time_id').with_row_index('date_time_id')
-    df = df.join(df_date_time_id, on=['date_id', 'time_id'], how='left').sort('date_id', 'time_id', 'symbol_id').with_row_index('row_id')
+    df = df.join(df_date_time_id, on=['date_id', 'time_id'], how='left')\
+        .with_columns(pl.lit(True).alias('is_scored'))\
+        .sort('date_id', 'time_id', 'symbol_id')\
+        .with_row_index('row_id')
+    
     
     max_date_time_id = df_date_time_id['date_time_id'].max()
     min_date_id = df.select('date_id').min().item()
     
-    responders = [f'responder_{i}' for i in range(9)]
     
     curr_idx:int = df_date_time_id.filter(pl.col('date_id').eq(min_date_id + 1))['date_time_id'].min()
     old_day = min_date_id
@@ -295,7 +301,7 @@ def online_iterator(df: pl.DataFrame, show_progress: bool = True):
             
             old_day = curr_day
 
-            batch = df.filter(pl.col('date_time_id').eq(curr_idx)).with_columns(pl.lit(True).alias('is_scored')).drop('date_time_id', *responders)
+            batch = df.filter(pl.col('date_time_id').eq(curr_idx)).drop('date_time_id', *responders)
             
             yield batch, lags if lags is not None else None
             

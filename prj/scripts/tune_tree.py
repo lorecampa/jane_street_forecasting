@@ -180,7 +180,7 @@ class TreeTuner(Tuner):
         self.model = AgentsFactory.build_agent({'agent_type': self.model_type, 'seeds': self.seeds})
 
         data_args = {}
-        # data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
+        data_args = {'include_intrastock_norm_temporal': True, 'include_time_id': True}
         data_args.update(self.custom_data_args)
         config = DataConfig(**data_args)
         self.loader = DataLoader(data_dir=data_dir, config=config)
@@ -239,6 +239,9 @@ class TreeTuner(Tuner):
             learn_args=learn_args,
         )
         X_val, y_val, w_val, _ = self.val_data
+        if X_val.shape[0] == 0:
+            return
+        
         batch_size = None
         if self.use_gpu:
             batch_size = X_val.shape[0] // 5
@@ -322,7 +325,7 @@ if __name__ == "__main__":
     storage = f'sqlite:///{out_dir}/optuna_study.db' if args.storage is None else args.storage
     
     logger = setup_logger(out_dir)
-    logger.info(f'Tuning model: {args.model}')
+    logger.info(f'Tuning model: {args.model}, saving to {out_dir}')
     
 
     optimizer = TreeTuner(

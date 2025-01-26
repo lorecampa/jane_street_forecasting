@@ -19,15 +19,17 @@ class OAMP:
         self,
         agents_count: int,
         args: ConfigOAMP,
+        agent_labels: typing.Optional[list[str]] = None,
     ):
         assert args.agents_weights_upd_freq > 0, "Agents' weights update frequency should be greater than 0"
         assert args.loss_fn_window > 0, "Loss function window should be greater than 0"
-        
+        assert agent_labels is None or len(agent_labels) == agents_count, "Number of agent labels should be equal to the number of agents"
         # Initializing agents
         self.agents_count = agents_count
         self.agents_losses = self.init_agents_losses(args.loss_fn_window)
         self.agents_weights_upd_freq = args.agents_weights_upd_freq # Right now it is measured in groups
         self.agg_type = args.agg_type
+        self.agent_labels = agent_labels
         
         # Initializing OAMP
         self.l_tm1 = np.zeros(agents_count)
@@ -55,7 +57,6 @@ class OAMP:
     def step(
         self,
         agents_losses: np.ndarray,
-        is_new_group: bool = False,
     ):
         # Updating agents' losses
         if agents_losses.ndim == 1:
@@ -64,8 +65,7 @@ class OAMP:
         for agents_loss in agents_losses:
             self.agents_losses.append(agents_loss)
         
-        if is_new_group: # New group
-            self.group_t += 1
+        self.group_t += 1
         
         # Updating agents' weights
         if self.group_t > 0 and self.group_t == self.agents_weights_upd_freq:
@@ -169,7 +169,7 @@ class OAMP:
         self,
         save_path: typing.Optional[str] = None,
     ):
-        agents = [f"Agent {n}" for n in range(self.agents_count)]
+        agents = [f"Agent {n}" for n in range(self.agents_count)] if self.agent_labels is None else self.agent_labels
         agents_losses = np.array(self.stats["losses"])
         agents_weights = np.array(self.stats["weights"])
         fig, axs = plt.subplots(2, 1, figsize=(10, 10))

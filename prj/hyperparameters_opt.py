@@ -22,7 +22,7 @@ def sample_lgbm_params(trial: optuna.Trial, additional_args: dict = {}) -> dict:
             "num_leaves": trial.suggest_int("num_leaves", 4, 1024),
             "subsample_freq": trial.suggest_int("subsample_freq", 1, 20),
             "subsample": trial.suggest_float("subsample", 0.1, 0.7),
-            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.1),
+            "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-3, step=1e-6),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.1, 0.8),
             "colsample_bynode": trial.suggest_float("colsample_bynode", 0.1, 1),
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-5, 1000, log=True),
