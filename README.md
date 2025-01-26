@@ -6,7 +6,7 @@
   </a>
 </p>
 
-We participated in the challenge as [...], a team of 3 MSc students from Politecnico di Milano:
+We participated in the [jane street 24 challenge](https://www.kaggle.com/competitions/jane-street-real-time-market-data-forecasting) as a team of 2 MSc students from Politecnico di Milano, ranking 246 out of 3757 teams:
 
 * **[Lorenzo Campana](https://github.com/lorecampa)**
 * **[Carlo Sgaravatti](https://github.com/CarloSgaravatti)**
